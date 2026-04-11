@@ -24,23 +24,27 @@ export class PanelVisibilityManager {
     this._menuOpen = false;
     this._isFullscreen = false;
 
+    // Adjust panel chrome to not affect window struts
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: false,
       trackFullscreen: true,
     });
 
+    // Fix notification position when panel is hidden
     this._oldTween = MessageTray._tween;
     MessageTray._tween = (actor, statevar, value, params) => {
       params.y += PanelBox.y < 0 ? 0 : this._panelHeight;
       this._oldTween.apply(MessageTray, arguments);
     };
 
+    // Initialize Intellihide for window tracking
     this._intellihide = new Intellihide(settings, monitorIndex);
     this._intellihide.connect("overlap-changed", (obj, overlaps) => {
       this._handleIntellihideChange(overlaps);
     });
 
+    // Defer binding to ensure shell is ready
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._bindSettingsChanges();
       this._bindUIChanges();
@@ -66,6 +70,7 @@ export class PanelVisibilityManager {
     DEBUG(`hide(${trigger})`);
     if (this._preventHide || this._animationActive) return;
 
+    // If a menu is open, do not hide
     if (Main.panel.menuManager.activeMenu) {
       this._menuOpen = true;
       return;
@@ -80,6 +85,7 @@ export class PanelVisibilityManager {
       mode: Clutter.AnimationMode.EASE_OUT_QUAD,
       onComplete: () => {
         this._animationActive = false;
+        // Start mouse tracking if hidden due to intellihide or fullscreen
         if (this._intellihide.overlaps || this._isFullscreen) {
           this._startMouseWatch();
         }
@@ -110,7 +116,7 @@ export class PanelVisibilityManager {
 
   _checkMouseAfterShow() {
     const [x, y] = global.get_pointer();
-    const threshold = this._panelHeight + 10;
+    const threshold = this._panelHeight * 2;
     if (y > threshold && !this._isMouseOverPanel(x, y)) {
       this.hide(this._getAnimationTime(), "mouse-left");
     } else {
@@ -146,11 +152,11 @@ export class PanelVisibilityManager {
     if (this._animationActive) return;
 
     const [x, y] = global.get_pointer();
+    const screenHeight = global.screen_height;
+    const thresholdShow = screenHeight * 0.05;
+    const thresholdHide = screenHeight * 0.1;
 
-    // Use fixed pixel thresholds for precise edge detection
-    const SHOW_THRESHOLD_PX = 2;
-    const HIDE_THRESHOLD_PX = this._panelHeight + 10;
-
+    // If a menu is open, always keep panel visible
     if (Main.panel.menuManager.activeMenu) {
       if (!this._menuOpen) {
         this._menuOpen = true;
@@ -164,11 +170,11 @@ export class PanelVisibilityManager {
     const panelVisible = PanelBox.y >= this._baseY;
 
     if (!panelVisible) {
-      if (y < SHOW_THRESHOLD_PX) {
-        this.show(this._getAnimationTime(), "mouse-edge");
+      if (y < thresholdShow) {
+        this.show(this._getAnimationTime(), "mouse-near-top");
       }
     } else {
-      if (y > HIDE_THRESHOLD_PX && !this._isMouseOverPanel(x, y)) {
+      if (y > thresholdHide && !this._isMouseOverPanel(x, y)) {
         if (this._intellihide.overlaps || this._isFullscreen) {
           this.hide(this._getAnimationTime(), "mouse-left");
         }
