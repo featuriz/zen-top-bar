@@ -1,3 +1,20 @@
-*.shell-extension.zip
+# Build artifacts and temporary files
+*.zip
 node_modules/
+schemas/gschemas.compiled
+*.mo
+*.pot
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS-specific files
 .DS_Store
+Thumbs.db
+
+# Local configuration
+.env
