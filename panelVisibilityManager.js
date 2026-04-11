@@ -1,140 +1,274 @@
-// panelVisibilityManager.js
-import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
+import Clutter from "gi://Clutter";
+import Shell from "gi://Shell";
+
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";
+
+import * as Convenience from "./convenience.js";
+import { Intellihide } from "./intellihide.js";
+
+const DEBUG = Convenience.DEBUG;
+const PanelBox = Main.layoutManager.panelBox;
+const MessageTray = Main.messageTray;
 
 export class PanelVisibilityManager {
-  constructor(panel, settings) {
-    this._panel = panel;
+  constructor(settings, monitorIndex) {
     this._settings = settings;
-    this._panelBox = Main.layoutManager.panelBox;
+    this._monitorIndex = monitorIndex;
+    this._baseY = PanelBox.y;
+    this._panelHeight = PanelBox.height;
+    this._animationActive = false;
+    this._preventHide = false;
+    this._mouseWatchId = 0;
+    this._menuOpen = false;
+    this._isFullscreen = false;
 
-    this._hovering = false;
-    this._updateId = 0;
-    this._signals = new Map();
+    Main.layoutManager.removeChrome(PanelBox);
+    Main.layoutManager.addChrome(PanelBox, {
+      affectsStruts: false,
+      trackFullscreen: true,
+    });
 
-    this._pointerWatcher = PointerWatcher.getPointerWatcher();
-    this._initPanelVisibility();
-  }
+    this._oldTween = MessageTray._tween;
+    MessageTray._tween = (actor, statevar, value, params) => {
+      params.y += PanelBox.y < 0 ? 0 : this._panelHeight;
+      this._oldTween.apply(MessageTray, arguments);
+    };
 
-  _initPanelVisibility() {
-    // Remove panel from normal layout and add as floating chrome
-    Main.layoutManager.removeChrome(this._panelBox);
-    Main.layoutManager.addTopChrome(this._panelBox, { affectsStruts: false });
+    this._intellihide = new Intellihide(settings, monitorIndex);
+    this._intellihide.connect("overlap-changed", (obj, overlaps) => {
+      this._handleIntellihideChange(overlaps);
+    });
 
-    // Set up the PointerWatcher for a reliable hover trigger
-    this._setupPointerWatcher();
-
-    // Connect to relevant signals
-    this._addSignal(global.display, "notify::focus-window", () =>
-      this._queueUpdate(),
-    );
-    this._addSignal(global.window_manager, "size-change", () =>
-      this._queueUpdate(),
-    );
-    this._addSignal(Main.overview, "showing", () => this._queueUpdate());
-    this._addSignal(Main.overview, "hiding", () => this._queueUpdate());
-  }
-
-  _setupPointerWatcher() {
-    const primaryMonitor = Main.layoutManager.primaryMonitor;
-    this._pointerWatch = this._pointerWatcher.addWatch(
-      primaryMonitor.width,
-      {
-        x: primaryMonitor.x,
-        y: primaryMonitor.y,
-        width: primaryMonitor.width,
-        height: 5, // A generous 5px hot zone at the top
-      },
-      (x, y) => {
-        const isHovering = y >= primaryMonitor.y && y < primaryMonitor.y + 5;
-        if (isHovering !== this._hovering) {
-          this._hovering = isHovering;
-          this._queueUpdate();
-        }
-      },
-    );
-  }
-
-  _addSignal(object, signal, callback) {
-    if (object && typeof object.connect === "function") {
-      const id = object.connect(signal, callback);
-      this._signals.set(id, object);
-    }
-  }
-
-  _queueUpdate() {
-    if (this._updateId) GLib.source_remove(this._updateId);
-    this._updateId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-      this._updateVisibility();
-      this._updateId = 0;
+    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+      this._bindSettingsChanges();
+      this._bindUIChanges();
+      this._intellihide.enable();
       return GLib.SOURCE_REMOVE;
     });
   }
 
-  _updateVisibility() {
-    let shouldBeVisible = false;
-
-    if (this._hovering) {
-      shouldBeVisible = true;
+  _handleIntellihideChange(overlaps) {
+    DEBUG(`overlap changed: ${overlaps}`);
+    if (overlaps) {
+      this.hide(this._getAnimationTime(), "intellihide");
     } else {
-      const overviewVisible = Main.overview.visible;
-      const panelMenuActive = Main.panel.menuManager.activeMenu !== null;
-      const appMenu = Main.panel.statusArea.appMenu;
-      const appMenuOpen =
-        appMenu && appMenu._appMenu && appMenu._appMenu.isOpen;
-
-      if (overviewVisible || panelMenuActive || appMenuOpen) {
-        shouldBeVisible = true;
-      } else {
-        const win = global.display.get_focus_window();
-        if (!win || win.minimized) {
-          shouldBeVisible = true;
-        } else {
-          const isMaximized = win.maximized_vertically;
-          const frame = win.get_frame_rect();
-          const monitor = Main.layoutManager.primaryMonitor;
-          if (isMaximized || frame.y <= monitor.y + 10) {
-            shouldBeVisible = false;
-          } else {
-            shouldBeVisible = true;
-          }
-        }
-      }
+      this.show(this._getAnimationTime(), "intellihide");
     }
-
-    this._animatePanel(shouldBeVisible);
   }
 
-  _animatePanel(show) {
-    this._panelBox.remove_all_transitions();
-    const targetY = show ? 0 : -this._panelBox.height;
-    if (this._panelBox.translation_y === targetY) return;
+  _getAnimationTime() {
+    return this._settings.get_double("animation-time");
+  }
 
-    this._panelBox.ease({
-      translation_y: targetY,
-      duration: 200,
+  hide(duration, trigger) {
+    DEBUG(`hide(${trigger})`);
+    if (this._preventHide || this._animationActive) return;
+
+    if (Main.panel.menuManager.activeMenu) {
+      this._menuOpen = true;
+      return;
+    }
+
+    this._stopMouseWatch();
+    this._animationActive = true;
+
+    PanelBox.ease({
+      y: this._baseY - this._panelHeight,
+      duration,
       mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+      onComplete: () => {
+        this._animationActive = false;
+        if (this._intellihide.overlaps || this._isFullscreen) {
+          this._startMouseWatch();
+        }
+      },
     });
   }
 
+  show(duration, trigger) {
+    DEBUG(`show(${trigger})`);
+    if (this._animationActive) {
+      PanelBox.remove_all_transitions();
+    }
+
+    this._stopMouseWatch();
+    this._animationActive = true;
+    PanelBox.show();
+
+    PanelBox.ease({
+      y: this._baseY,
+      duration,
+      mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+      onComplete: () => {
+        this._animationActive = false;
+        this._checkMouseAfterShow();
+      },
+    });
+  }
+
+  _checkMouseAfterShow() {
+    const [x, y] = global.get_pointer();
+    const threshold = this._panelHeight + 10;
+    if (y > threshold && !this._isMouseOverPanel(x, y)) {
+      this.hide(this._getAnimationTime(), "mouse-left");
+    } else {
+      this._startMouseWatch();
+    }
+  }
+
+  _isMouseOverPanel(x, y) {
+    return (
+      y >= this._baseY &&
+      y < this._baseY + this._panelHeight &&
+      x >= PanelBox.x &&
+      x < PanelBox.x + PanelBox.width
+    );
+  }
+
+  _startMouseWatch() {
+    if (this._mouseWatchId) return;
+    this._mouseWatchId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+      this._handleMouseMove();
+      return GLib.SOURCE_CONTINUE;
+    });
+  }
+
+  _stopMouseWatch() {
+    if (this._mouseWatchId) {
+      GLib.source_remove(this._mouseWatchId);
+      this._mouseWatchId = 0;
+    }
+  }
+
+  _handleMouseMove() {
+    if (this._animationActive) return;
+
+    const [x, y] = global.get_pointer();
+
+    // Use fixed pixel thresholds for precise edge detection
+    const SHOW_THRESHOLD_PX = 2;
+    const HIDE_THRESHOLD_PX = this._panelHeight + 10;
+
+    if (Main.panel.menuManager.activeMenu) {
+      if (!this._menuOpen) {
+        this._menuOpen = true;
+        this.show(0, "menu-open");
+      }
+      return;
+    } else {
+      this._menuOpen = false;
+    }
+
+    const panelVisible = PanelBox.y >= this._baseY;
+
+    if (!panelVisible) {
+      if (y < SHOW_THRESHOLD_PX) {
+        this.show(this._getAnimationTime(), "mouse-edge");
+      }
+    } else {
+      if (y > HIDE_THRESHOLD_PX && !this._isMouseOverPanel(x, y)) {
+        if (this._intellihide.overlaps || this._isFullscreen) {
+          this.hide(this._getAnimationTime(), "mouse-left");
+        }
+      }
+    }
+  }
+
+  _bindUIChanges() {
+    this._signalsHandler = new Convenience.GlobalSignalsHandler();
+    this._signalsHandler.add(
+      [
+        global.display,
+        "window-created",
+        (d, win) => this._onWindowCreated(win),
+      ],
+      [
+        global.display,
+        "window-left-monitor",
+        () => this._updateFullscreenState(),
+      ],
+      [
+        global.display,
+        "window-entered-monitor",
+        () => this._updateFullscreenState(),
+      ],
+      [
+        Main.layoutManager,
+        "monitors-changed",
+        () => {
+          this._baseY = PanelBox.y;
+          this._panelHeight = PanelBox.height;
+          this._intellihide.updateMonitor(Main.layoutManager.primaryIndex);
+        },
+      ],
+      [
+        Main.panel.menuManager,
+        "notify::activeMenu",
+        () => {
+          if (Main.panel.menuManager.activeMenu) {
+            this._menuOpen = true;
+            this.show(0, "menu-open");
+          } else {
+            this._menuOpen = false;
+            this._checkMouseAfterShow();
+          }
+        },
+      ],
+    );
+
+    this._updateFullscreenState();
+  }
+
+  _onWindowCreated(win) {
+    const id = win.connect("notify::fullscreen", () => {
+      this._updateFullscreenState();
+    });
+    win._zenFullscreenSignal = id;
+  }
+
+  _updateFullscreenState() {
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    this._isFullscreen = monitor?.inFullscreen || false;
+
+    if (this._isFullscreen) {
+      this.hide(this._getAnimationTime(), "fullscreen");
+    } else {
+      this._handleIntellihideChange(this._intellihide.overlaps);
+    }
+  }
+
+  _bindSettingsChanges() {
+    this._settingsHandler = new Convenience.GlobalSignalsHandler();
+    this._settingsHandler.addWithLabel(
+      "settings",
+      [this._settings, "changed::animation-time", () => {}],
+      [
+        this._settings,
+        "changed::intellihide-threshold",
+        () =>
+          this._intellihide.setThreshold(
+            this._settings.get_double("intellihide-threshold"),
+          ),
+      ],
+    );
+  }
+
   destroy() {
-    if (this._updateId) GLib.source_remove(this._updateId);
-    for (const [id, object] of this._signals) {
-      object.disconnect(id);
-    }
-    this._signals.clear();
+    this._stopMouseWatch();
+    this._intellihide.destroy();
+    if (this._signalsHandler) this._signalsHandler.destroy();
+    if (this._settingsHandler) this._settingsHandler.destroy();
 
-    if (this._pointerWatch) {
-      this._pointerWatcher._removeWatch(this._pointerWatch);
-      this._pointerWatch = null;
-    }
+    MessageTray._tween = this._oldTween;
 
-    Main.layoutManager.removeChrome(this._panelBox);
-    Main.layoutManager.addChrome(this._panelBox, { affectsStruts: true });
-    this._panelBox.remove_all_transitions();
-    this._panelBox.translation_y = 0;
+    Main.layoutManager.removeChrome(PanelBox);
+    Main.layoutManager.addChrome(PanelBox, {
+      affectsStruts: true,
+      trackFullscreen: true,
+    });
+
+    this.show(0, "destroy");
   }
 }
