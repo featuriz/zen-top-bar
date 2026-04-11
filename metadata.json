@@ -4,5 +4,6 @@
   "uuid": "zentopbar@featuriz.in",
   "shell-version": ["50"],
   "version": 1,
-  "url": "https://github.com/featuriz/zen-top-bar.git"
+  "url": "https://github.com/featuriz/zen-top-bar.git",
+  "settings-schema": "org.gnome.shell.extensions.zen-top-bar"
 }

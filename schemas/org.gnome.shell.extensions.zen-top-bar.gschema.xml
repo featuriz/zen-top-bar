@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.zen-top-bar" path="/org/gnome/shell/extensions/zen-top-bar/">
+    <!-- Define your settings keys here. Example: -->
+    <key name="auto-hide-delay" type="i">
+      <default>200</default>
+      <summary>Auto-hide delay</summary>
+      <description>Time in milliseconds before the bar hides.</description>
+    </key>
+  </schema>
+</schemalist>
