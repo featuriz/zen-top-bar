@@ -10,19 +10,19 @@ import * as Convenience from "./convenience.js";
 const DEBUG = Convenience.DEBUG;
 
 export const Intellihide = class Intellihide extends Signals.EventEmitter {
-  constructor(settings, monitorIndex) {
+  constructor(settings, monitorIndex, panelHeight) {
     super();
     this._settings = settings;
     this._monitorIndex = monitorIndex;
+    this._panelHeight = panelHeight; // Pixel height of the top bar
     this._overlaps = false;
-    this._threshold = settings.get_double("intellihide-threshold"); // 0.1 = 10%
     this._checkTimeoutId = 0;
     this._enabled = false;
 
     this._signalsHandler = new Convenience.GlobalSignalsHandler();
     this._tracker = Shell.WindowTracker.get_default();
 
-    // Defer signal connections to idle to ensure global objects are ready
+    // Defer signal connections to idle
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       if (this._signalsHandler) {
         this._signalsHandler.add(
@@ -54,8 +54,8 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
     }
   }
 
-  setThreshold(value) {
-    this._threshold = value;
+  updatePanelHeight(height) {
+    this._panelHeight = height;
     this._checkOverlap();
   }
 
@@ -69,7 +69,6 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
   }
 
   _onWindowCreated(display, win) {
-    // Connect to move/resize signals
     const id1 = win.connect("position-changed", this._checkOverlap.bind(this));
     const id2 = win.connect("size-changed", this._checkOverlap.bind(this));
     win._zenSignals = [id1, id2];
@@ -102,9 +101,8 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
     const monitor = Main.layoutManager.monitors[this._monitorIndex];
     if (!monitor) return;
 
-    const screenHeight = monitor.height;
-    const thresholdPixels = screenHeight * this._threshold; // 10% of screen height
-    const topBoundary = monitor.y + thresholdPixels;
+    // Threshold is exactly the panel height (10 units)
+    const topBoundary = monitor.y + this._panelHeight;
 
     let overlaps = false;
     const windows = global.get_window_actors();
@@ -116,7 +114,7 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
       if (!this._isWindowRelevant(win)) continue;
 
       const rect = win.get_frame_rect();
-      // Check if window top edge is within threshold from screen top
+      // Check if window top edge overlaps the top bar area
       if (rect.y < topBoundary) {
         overlaps = true;
         break;
@@ -130,7 +128,6 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
   }
 
   _isWindowRelevant(win) {
-    // Skip desktop windows, docks, etc.
     const type = win.get_window_type();
     const handledTypes = [
       Meta.WindowType.NORMAL,
@@ -140,10 +137,8 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
     ];
     if (!handledTypes.includes(type)) return false;
 
-    // Skip windows that are skip-taskbar (like desktop icons)
     if (win.is_skip_taskbar()) return false;
 
-    // Check workspace
     const activeWorkspace =
       global.workspace_manager.get_active_workspace_index();
     const winWorkspace = win.get_workspace();

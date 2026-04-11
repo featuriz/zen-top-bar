@@ -19,7 +19,6 @@ export class PanelVisibilityManager {
     this._baseY = PanelBox.y;
     this._panelHeight = PanelBox.height;
     this._animationActive = false;
-    this._preventHide = false;
     this._mouseWatchId = 0;
     this._menuOpen = false;
     this._isFullscreen = false;
@@ -39,16 +38,22 @@ export class PanelVisibilityManager {
     };
 
     // Initialize Intellihide for window tracking
-    this._intellihide = new Intellihide(settings, monitorIndex);
+    this._intellihide = new Intellihide(
+      settings,
+      monitorIndex,
+      this._panelHeight,
+    );
     this._intellihide.connect("overlap-changed", (obj, overlaps) => {
       this._handleIntellihideChange(overlaps);
     });
 
-    // Defer binding to ensure shell is ready
+    // Defer binding to ensure shell readiness
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._bindSettingsChanges();
       this._bindUIChanges();
       this._intellihide.enable();
+      // Ensure panel is visible initially
+      this.show(0, "init");
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -58,7 +63,10 @@ export class PanelVisibilityManager {
     if (overlaps) {
       this.hide(this._getAnimationTime(), "intellihide");
     } else {
-      this.show(this._getAnimationTime(), "intellihide");
+      // Only show if we're not in fullscreen
+      if (!this._isFullscreen) {
+        this.show(this._getAnimationTime(), "intellihide");
+      }
     }
   }
 
@@ -68,7 +76,7 @@ export class PanelVisibilityManager {
 
   hide(duration, trigger) {
     DEBUG(`hide(${trigger})`);
-    if (this._preventHide || this._animationActive) return;
+    if (this._animationActive) return;
 
     // If a menu is open, do not hide
     if (Main.panel.menuManager.activeMenu) {
@@ -116,11 +124,15 @@ export class PanelVisibilityManager {
 
   _checkMouseAfterShow() {
     const [x, y] = global.get_pointer();
-    const threshold = this._panelHeight * 2;
-    if (y > threshold && !this._isMouseOverPanel(x, y)) {
-      this.hide(this._getAnimationTime(), "mouse-left");
+    const hideThreshold = this._panelHeight + 10; // Buffer below panel
+    if (y > hideThreshold && !this._isMouseOverPanel(x, y)) {
+      if (this._intellihide.overlaps || this._isFullscreen) {
+        this.hide(this._getAnimationTime(), "mouse-left");
+      }
     } else {
-      this._startMouseWatch();
+      if (this._intellihide.overlaps || this._isFullscreen) {
+        this._startMouseWatch();
+      }
     }
   }
 
@@ -152,9 +164,10 @@ export class PanelVisibilityManager {
     if (this._animationActive) return;
 
     const [x, y] = global.get_pointer();
-    const screenHeight = global.screen_height;
-    const thresholdShow = screenHeight * 0.05;
-    const thresholdHide = screenHeight * 0.1;
+
+    // Reference plugin style: small fixed pixel edge trigger
+    const SHOW_EDGE_PX = 2;
+    const HIDE_THRESHOLD_PX = this._panelHeight + 10;
 
     // If a menu is open, always keep panel visible
     if (Main.panel.menuManager.activeMenu) {
@@ -170,11 +183,13 @@ export class PanelVisibilityManager {
     const panelVisible = PanelBox.y >= this._baseY;
 
     if (!panelVisible) {
-      if (y < thresholdShow) {
-        this.show(this._getAnimationTime(), "mouse-near-top");
+      // Panel hidden: show only if cursor touches top edge
+      if (y < SHOW_EDGE_PX) {
+        this.show(this._getAnimationTime(), "mouse-edge");
       }
     } else {
-      if (y > thresholdHide && !this._isMouseOverPanel(x, y)) {
+      // Panel visible: hide if cursor leaves panel area
+      if (y > HIDE_THRESHOLD_PX && !this._isMouseOverPanel(x, y)) {
         if (this._intellihide.overlaps || this._isFullscreen) {
           this.hide(this._getAnimationTime(), "mouse-left");
         }
@@ -206,6 +221,7 @@ export class PanelVisibilityManager {
         () => {
           this._baseY = PanelBox.y;
           this._panelHeight = PanelBox.height;
+          this._intellihide.updatePanelHeight(this._panelHeight);
           this._intellihide.updateMonitor(Main.layoutManager.primaryIndex);
         },
       ],
@@ -241,6 +257,7 @@ export class PanelVisibilityManager {
     if (this._isFullscreen) {
       this.hide(this._getAnimationTime(), "fullscreen");
     } else {
+      // Exit fullscreen, re-evaluate based on intellihide
       this._handleIntellihideChange(this._intellihide.overlaps);
     }
   }
@@ -253,10 +270,9 @@ export class PanelVisibilityManager {
       [
         this._settings,
         "changed::intellihide-threshold",
-        () =>
-          this._intellihide.setThreshold(
-            this._settings.get_double("intellihide-threshold"),
-          ),
+        () => {
+          // Not used in this version, but keep for future
+        },
       ],
     );
   }

@@ -36,11 +36,10 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     animationRow.add_suffix(animationSpin);
     group.add(animationRow);
 
-    // Intellihide threshold
+    // Intellihide threshold (kept for future, not used currently)
     const thresholdRow = new Adw.ActionRow({
-      title: "Hide threshold",
-      subtitle:
-        "Distance from top (as fraction of screen height) to trigger hide",
+      title: "Hide threshold (unused)",
+      subtitle: "Currently fixed to panel height",
     });
     const thresholdSpin = new Gtk.SpinButton({
       adjustment: new Gtk.Adjustment({
@@ -50,6 +49,7 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
       }),
       digits: 2,
       valign: Gtk.Align.CENTER,
+      sensitive: false,
     });
     settings.bind(
       "intellihide-threshold",
