@@ -17,57 +17,57 @@
 </p>
 
 <p align="center">
-  <b>A modern GNOME Shell extension that intelligently hides the top bar to give you more screen real estate, while remaining instantly accessible.</b>
+  <b>A modern GNOME Shell extension that intelligently hides the top bar and lets you customize its transparency and color — for a cleaner, more focused desktop.</b>
 </p>
 
 ---
 
 ## 📖 Overview
 
-**Zen Top Bar** brings an intelligent auto‑hide behavior to the GNOME top panel. When a window touches the top edge of the screen, the panel gracefully slides away, letting you focus on your work. Move your cursor to the very top of the screen, and the panel instantly returns—making it perfect for both mouse‑driven and keyboard‑centric workflows.
+**Zen Top Bar** brings intelligent auto-hide behavior and visual customization to the GNOME top panel. When a window touches the top edge of the screen, the panel gracefully slides away so you can focus on your work. Move your cursor to the very top of the screen and the panel instantly returns.
 
-This extension is built from the ground up for **GNOME Shell 50**, using modern ES modules and the latest GNOME APIs. It is a lightweight, dependency‑free solution that respects your system’s performance and visual consistency.
+On top of that, the panel adapts its transparency based on whether a window is behind it — fully transparent on a clear desktop, and semi-solid when a window is present, keeping the panel readable at all times.
+
+Built from the ground up for **GNOME Shell 50** using modern ES modules, proper signal lifecycle management, and the latest GNOME APIs. Lightweight, dependency-free, and memory-safe.
 
 ---
 
 ## ✨ Features
 
-| Feature                       | Description                                                                                                       |
-| :---------------------------- | :---------------------------------------------------------------------------------------------------------------- |
-| 🧠 **Smart Window Detection** | Panel hides automatically when any window is positioned against the top screen edge.                              |
-| 🖱️ **Edge‑Triggered Reveal**  | Simply bump your cursor against the top screen edge (within 2 pixels) to show the panel.                          |
-| 🖥️ **Full‑Screen Aware**      | Panel stays hidden in full‑screen applications and can be temporarily revealed with the same edge gesture.        |
-| 📋 **Menu‑Safe**              | Panel remains visible while any system menu (clock, system tray, etc.) is open, preventing accidental hiding.     |
-| ✨ **Smooth Animations**      | Fluid easing transitions provide a polished, native feel.                                                         |
-| ⚡ **Performance Optimized**  | Minimal overhead; runs efficiently using debounced event listeners and low‑frequency polling only when necessary. |
-| 🌍 **Wayland & X11 Ready**    | Fully compatible with both display servers.                                                                       |
+| Feature | Description |
+| :--- | :--- |
+| 🧠 **Smart Window Detection** | Panel hides automatically when any window is positioned against the top screen edge. |
+| 🎨 **Panel Color** | Set a custom background color for the panel. |
+| 💧 **Adaptive Transparency** | Panel is fully transparent on a clear desktop, and becomes opaque when a window is behind it — both values are independently configurable. |
+| 🖱️ **Edge-Triggered Reveal** | Bump your cursor against the top edge (within 2 px) to show the panel. |
+| 🖥️ **Full-Screen Aware** | Panel stays hidden in full-screen applications. |
+| 📋 **Menu-Safe** | Panel stays visible while any system menu is open, preventing accidental hiding. |
+| ✨ **Smooth Animations** | Fluid easing transitions with configurable duration. |
+| ⚡ **Performance Optimized** | Event-driven pointer watching (no polling), debounced overlap checks, and proper signal/resource cleanup. |
+| 🌍 **Wayland & X11** | Fully compatible with both display servers. |
 
 ---
 
 ## 🚀 Supported GNOME Versions
 
-| Version            | Status                          |
-| :----------------- | :------------------------------ |
-| **GNOME 50**       | ✅ Fully supported and tested   |
-| GNOME 47–49        | ✅ Compatible (limited testing) |
-| GNOME 46           | ⚠️ May work with minor issues   |
-| GNOME 45 and older | ❌ Not supported                |
-
-> **Note:** This extension is actively maintained for **GNOME 50**. Future GNOME releases will be supported as soon as possible after their official release.
+| Version | Status |
+| :--- | :--- |
+| **GNOME 50** | ✅ Fully supported and tested |
+| GNOME 47–49 | ✅ Compatible (limited testing) |
+| GNOME 46 | ⚠️ May work with minor issues |
+| GNOME 45 and older | ❌ Not supported |
 
 ---
 
 ## 🧪 Tested Environments
 
-The extension has been thoroughly tested in the following configurations:
-
-| Distribution        | GNOME Version | Windowing System | Status              |
-| :------------------ | :------------ | :--------------- | :------------------ |
-| Arch Linux          | 50.4          | Wayland          | ✅ Fully functional |
-| Arch Linux          | 50.4          | X11              | ✅ Fully functional |
-| Fedora 42           | 50.0          | Wayland          | ✅ Fully functional |
-| Ubuntu 25.04        | 50.1          | Wayland          | ✅ Fully functional |
-| openSUSE Tumbleweed | 50.2          | Wayland          | ✅ Fully functional |
+| Distribution | GNOME Version | Windowing System | Status |
+| :--- | :--- | :--- | :--- |
+| Arch Linux | 50.4 | Wayland | ✅ Fully functional |
+| Arch Linux | 50.4 | X11 | ✅ Fully functional |
+| Fedora 42 | 50.0 | Wayland | ✅ Fully functional |
+| Ubuntu 25.04 | 50.1 | Wayland | ✅ Fully functional |
+| openSUSE Tumbleweed | 50.2 | Wayland | ✅ Fully functional |
 
 If you encounter issues on a different setup, please [open an issue](https://github.com/featuriz/zen-top-bar/issues).
 
@@ -77,24 +77,22 @@ If you encounter issues on a different setup, please [open an issue](https://git
 
 ### Recommended: Via GNOME Extensions Website
 
-1. Visit the extension page on **[extensions.gnome.org](https://extensions.gnome.org/extension/XXXXX/zen-top-bar/)** (link will be active after review).
+1. Visit the extension page on **[extensions.gnome.org](https://extensions.gnome.org/extension/XXXXX/zen-top-bar/)**.
 2. Toggle the switch to **ON**.
-3. The extension will install and activate automatically.
+3. The extension installs and activates automatically.
 
-### Manual Installation (Latest .zip Release)
+### Manual Installation
 
 ```bash
 # Download the latest release
 wget https://github.com/featuriz/zen-top-bar/releases/latest/download/zentopbar@featuriz.in.shell-extension.zip
 
-# Install using gnome-extensions
+# Install
 gnome-extensions install zentopbar@featuriz.in.shell-extension.zip
 
-# Enable the extension
+# Enable
 gnome-extensions enable zentopbar@featuriz.in
 ```
-
-Then restart GNOME Shell by pressing `Alt` + `F2`, typing `r`, and pressing `Enter`.
 
 ### Build from Source
 
@@ -104,50 +102,43 @@ cd zen-top-bar
 make install
 ```
 
-_(Requires `gettext` and `glib2` development tools.)_
-
 ---
 
 ## ⚙️ Configuration
 
-Configuration is available through the **Extensions** application (or `gnome-extensions prefs zentopbar@featuriz.in`):
-
-| Setting                | Description                                    | Default |
-| :--------------------- | :--------------------------------------------- | :------ |
-| **Animation Duration** | Speed of the show/hide animation (in seconds). | `0.2`   |
-
-> Additional settings (e.g., mouse sensitivity, full‑screen behavior) may be added in future releases.
-
----
-
-## 🛠️ Building from Source
-
-To build the extension manually:
+Open the **Extensions** app or run:
 
 ```bash
-# Clone the repository
-git clone https://github.com/featuriz/zen-top-bar.git
-cd zen-top-bar
-
-# Compile GSettings schema
-glib-compile-schemas schemas/
-
-# Create a distributable ZIP archive
-make zip
+gnome-extensions prefs zentopbar@featuriz.in
 ```
 
-The resulting `.shell-extension.zip` file can be installed via the `gnome-extensions` tool or uploaded to the GNOME Extensions website.
+### Behavior
+
+| Setting | Description | Default |
+| :--- | :--- | :--- |
+| **Animation Duration** | Speed of the show/hide slide animation (seconds). | `0.2` |
+
+### Appearance
+
+| Setting | Description | Default |
+| :--- | :--- | :--- |
+| **Panel Color** | Background color of the panel (`#rrggbb`). | `#000000` |
+| **Opacity when clear** | Panel opacity when no window is behind it. `0.0` = invisible. | `0.0` |
+| **Opacity when overlapped** | Panel opacity when a window is behind the panel. | `0.85` |
+
+> **Tip:** Setting "Opacity when clear" to `0.0` makes the panel completely invisible on a clean desktop — the wallpaper shows through fully. The panel only becomes visible when a window pushes against the top edge or your cursor reaches the screen edge.
 
 ---
 
 ## 🐛 Troubleshooting
 
-| Symptom                                                | Solution                                                                                                                                             |
-| :----------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Panel does not hide when a window touches the top      | Ensure no system menu is open. Some applications (e.g., terminals with custom title bars) may not trigger detection. Try moving the window slightly. |
-| Panel does not appear when cursor touches the top edge | Move the cursor all the way to the screen edge. If using a multi‑monitor setup, ensure the cursor is on the primary display.                         |
-| Extension fails to load after GNOME Shell restart      | Check the log with `journalctl -f -o cat /usr/bin/gnome-shell`. Look for errors containing `zentopbar`.                                              |
-| Panel flickers when a menu is open                     | This is a known GNOME Shell behavior; the extension includes mitigations but minor flicker may still occur in some themes.                           |
+| Symptom | Solution |
+| :--- | :--- |
+| Panel does not hide when a window touches the top | Ensure no system menu is open. Try moving the window slightly to trigger re-evaluation. |
+| Panel does not appear when cursor touches the top edge | Move the cursor all the way to the screen edge (within 2 px). On multi-monitor setups, ensure the cursor is on the primary display. |
+| Panel is invisible and not responding | Your opacity settings may both be at `0.0`. Open prefs and raise "Opacity when clear". |
+| Extension fails to load after GNOME Shell restart | Check logs: `journalctl -f -o cat /usr/bin/gnome-shell` and look for `zentopbar`. |
+| Panel flickers when a menu is open | Known GNOME Shell behavior in some themes. The extension includes mitigations but minor flicker may still occur. |
 
 If problems persist, please [report a bug](https://github.com/featuriz/zen-top-bar/issues/new?template=bug_report.md).
 
@@ -155,27 +146,25 @@ If problems persist, please [report a bug](https://github.com/featuriz/zen-top-b
 
 ## 🤝 Contributing
 
-Contributions are warmly welcomed! Whether it’s a bug report, a feature request, or a pull request, your input helps make Zen Top Bar better.
+Contributions are warmly welcomed — bug reports, feature requests, and pull requests all help.
 
 1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/amazing-feature`).
-3. Commit your changes (`git commit -m 'Add amazing feature'`).
-4. Push to the branch (`git push origin feature/amazing-feature`).
+2. Create a feature branch: `git checkout -b feature/your-feature`.
+3. Commit your changes: `git commit -m 'Add your feature'`.
+4. Push: `git push origin feature/your-feature`.
 5. Open a Pull Request.
-
-Please read our [Contributing Guidelines](CONTRIBUTING.md) for more details.
 
 ---
 
 ## 📄 License
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 
 ---
 
 ## 🙏 Acknowledgments
 
-- Inspired by the excellent [Hide Top Bar](https://gitlab.gnome.org/tuxor1337/hidetopbar) extension by tuxor1337.
+- Inspired by [Hide Top Bar](https://gitlab.gnome.org/tuxor1337/hidetopbar) by tuxor1337.
 - Built with the [GNOME Shell Extension Guide](https://gjs.guide/extensions/) and modern ES module patterns.
 - Thanks to the GNOME community for continuous support and feedback.
 
