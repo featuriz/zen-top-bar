@@ -17,6 +17,7 @@ export class PanelVisibilityManager {
     this._baseY = PanelBox.y;
     this._panelHeight = PanelBox.height;
     this._animationActive = false;
+    this._panelAtRest = false; // true only when panel is fully visible and not animating
     this._isFullscreen = false;
     this._initIdleId = 0;
     this._overlapChangedId = 0;
@@ -49,6 +50,7 @@ export class PanelVisibilityManager {
     // Defer UI binding to ensure the shell is fully ready
     this._initIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._initIdleId = 0;
+      this._bindSettingsChanges();
       this._bindUIChanges();
       this._intellihide.enable();
       this.show(0, "init");
@@ -72,6 +74,7 @@ export class PanelVisibilityManager {
       this._animationActive = false;
     }
 
+    this._panelAtRest = false;
     this._stopPointerWatch();
     this._animationActive = true;
 
@@ -96,6 +99,7 @@ export class PanelVisibilityManager {
       this._animationActive = false;
     }
 
+    this._panelAtRest = false;
     this._stopPointerWatch();
     this._animationActive = true;
     PanelBox.show();
@@ -106,10 +110,44 @@ export class PanelVisibilityManager {
       mode: Clutter.AnimationMode.EASE_OUT_QUAD,
       onComplete: () => {
         this._animationActive = false;
+        this._panelAtRest = true;
+        // Apply correct transparency now that panel is fully visible
+        this._updatePanelStyle();
         // Start watching so we know when the mouse leaves the panel area
         this._startPointerWatch();
       },
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transparency
+  // ---------------------------------------------------------------------------
+
+  _updatePanelStyle() {
+    // Only apply style when the panel is fully visible and at rest (Option B).
+    // Avoids visual glitches during the slide animation.
+    if (!this._panelAtRest) return;
+
+    const hex = this._settings.get_string("panel-color");
+    const opacity = this._intellihide.overlaps
+      ? this._settings.get_double("panel-opacity-overlap")
+      : this._settings.get_double("panel-opacity-clear");
+
+    const { r, g, b } = this._hexToRgb(hex);
+    Main.panel.set_style(
+      `background-color: rgba(${r}, ${g}, ${b}, ${opacity});`,
+    );
+  }
+
+  _hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+      ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16),
+        }
+      : { r: 0, g: 0, b: 0 }; // Fallback to black on invalid hex
   }
 
   // ---------------------------------------------------------------------------
@@ -209,6 +247,24 @@ export class PanelVisibilityManager {
   // Signal binding
   // ---------------------------------------------------------------------------
 
+  _bindSettingsChanges() {
+    this._settingsHandler = new Convenience.GlobalSignalsHandler();
+    this._settingsHandler.addWithLabel(
+      "settings",
+      [this._settings, "changed::panel-color", () => this._updatePanelStyle()],
+      [
+        this._settings,
+        "changed::panel-opacity-clear",
+        () => this._updatePanelStyle(),
+      ],
+      [
+        this._settings,
+        "changed::panel-opacity-overlap",
+        () => this._updatePanelStyle(),
+      ],
+    );
+  }
+
   _bindUIChanges() {
     this._signalsHandler = new Convenience.GlobalSignalsHandler();
     this._signalsHandler.add(
@@ -286,10 +342,14 @@ export class PanelVisibilityManager {
       this._initIdleId = 0;
     }
 
-    // 2. Disconnect all global signals first — nothing should fire after this
+    // 2. Disconnect all global and settings signals — nothing should fire after this
     if (this._signalsHandler) {
       this._signalsHandler.destroy();
       this._signalsHandler = null;
+    }
+    if (this._settingsHandler) {
+      this._settingsHandler.destroy();
+      this._settingsHandler = null;
     }
 
     // 3. Stop pointer watching
@@ -310,12 +370,12 @@ export class PanelVisibilityManager {
     }
     this._windowFullscreenSignals.clear();
 
-    // 6. Restore panel to visible state immediately (no animation)
+    // 6. Restore panel style, position, and chrome
+    Main.panel.set_style(null);
     PanelBox.remove_all_transitions();
     PanelBox.show();
     PanelBox.y = this._baseY;
 
-    // 7. Restore original chrome settings
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: true,
