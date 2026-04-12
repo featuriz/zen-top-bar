@@ -1,5 +1,3 @@
-import GLib from "gi://GLib";
-
 export const DEBUG = function (message) {
   // Set to true for debugging
   if (false) console.log(`[zentopbar] ${message}`);
@@ -23,12 +21,14 @@ export class GlobalSignalsHandler {
     for (const element of elements) {
       const [object, event, callback] = element;
       if (!object) {
-        console.warn(`[zentopbar] Cannot connect to null object: ${event}`);
+        console.warn(
+          `[zentopbar] Cannot connect to null object for signal: ${event}`,
+        );
         continue;
       }
       if (typeof object.connect !== "function") {
         console.warn(
-          `[zentopbar] Object does not have connect method: ${object}`,
+          `[zentopbar] Object has no connect() for signal: ${event}`,
         );
         continue;
       }
@@ -36,7 +36,7 @@ export class GlobalSignalsHandler {
         const id = object.connect(event, callback);
         this._signals[label].push([object, id]);
       } catch (e) {
-        console.error(`[zentopbar] Failed to connect signal '${event}': ${e}`);
+        console.error(`[zentopbar] Failed to connect '${event}': ${e}`);
       }
     }
   }
@@ -47,7 +47,7 @@ export class GlobalSignalsHandler {
         try {
           obj.disconnect(id);
         } catch (e) {
-          // Ignore errors during disconnect
+          // Ignore errors during disconnect (object may already be destroyed)
         }
       }
       delete this._signals[label];

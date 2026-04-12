@@ -1,16 +1,14 @@
 import GLib from "gi://GLib";
-import Meta from "gi://Meta";
 import Clutter from "gi://Clutter";
-import Shell from "gi://Shell";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";
 
 import * as Convenience from "./convenience.js";
 import { Intellihide } from "./intellihide.js";
 
 const DEBUG = Convenience.DEBUG;
 const PanelBox = Main.layoutManager.panelBox;
-const MessageTray = Main.messageTray;
 
 export class PanelVisibilityManager {
   constructor(settings, monitorIndex) {
@@ -19,72 +17,62 @@ export class PanelVisibilityManager {
     this._baseY = PanelBox.y;
     this._panelHeight = PanelBox.height;
     this._animationActive = false;
-    this._mouseWatchId = 0;
-    this._menuOpen = false;
     this._isFullscreen = false;
+    this._initIdleId = 0;
+    this._overlapChangedId = 0;
 
-    // Adjust panel chrome to not affect window struts
+    // Event-driven pointer watching (replaces 50ms polling)
+    this._pointerWatcher = PointerWatcher.getPointerWatcher();
+    this._pointerListener = null;
+
+    // Map<MetaWindow, signalId> for fullscreen signal cleanup
+    this._windowFullscreenSignals = new Map();
+
+    // Adjust panel chrome so it doesn't reserve strut space
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: false,
       trackFullscreen: true,
     });
 
-    // Fix notification position when panel is hidden
-    this._oldTween = MessageTray._tween;
-    MessageTray._tween = (actor, statevar, value, params) => {
-      params.y += PanelBox.y < 0 ? 0 : this._panelHeight;
-      this._oldTween.apply(MessageTray, arguments);
-    };
-
-    // Initialize Intellihide for window tracking
+    // Initialize intellihide and store the signal ID for proper cleanup
     this._intellihide = new Intellihide(
       settings,
       monitorIndex,
       this._panelHeight,
     );
-    this._intellihide.connect("overlap-changed", (obj, overlaps) => {
-      this._handleIntellihideChange(overlaps);
-    });
+    this._overlapChangedId = this._intellihide.connect(
+      "overlap-changed",
+      (_obj, overlaps) => this._handleIntellihideChange(overlaps),
+    );
 
-    // Defer binding to ensure shell readiness
-    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-      this._bindSettingsChanges();
+    // Defer UI binding to ensure the shell is fully ready
+    this._initIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+      this._initIdleId = 0;
       this._bindUIChanges();
       this._intellihide.enable();
-      // Ensure panel is visible initially
       this.show(0, "init");
       return GLib.SOURCE_REMOVE;
     });
   }
 
-  _handleIntellihideChange(overlaps) {
-    DEBUG(`overlap changed: ${overlaps}`);
-    if (overlaps) {
-      this.hide(this._getAnimationTime(), "intellihide");
-    } else {
-      // Only show if we're not in fullscreen
-      if (!this._isFullscreen) {
-        this.show(this._getAnimationTime(), "intellihide");
-      }
-    }
-  }
-
-  _getAnimationTime() {
-    return this._settings.get_double("animation-time");
-  }
+  // ---------------------------------------------------------------------------
+  // Core show / hide
+  // ---------------------------------------------------------------------------
 
   hide(duration, trigger) {
     DEBUG(`hide(${trigger})`);
-    if (this._animationActive) return;
 
-    // If a menu is open, do not hide
-    if (Main.panel.menuManager.activeMenu) {
-      this._menuOpen = true;
-      return;
+    // Never hide while a panel menu is open
+    if (Main.panel.menuManager.activeMenu) return;
+
+    // Cancel any in-progress animation rather than dropping the request
+    if (this._animationActive) {
+      PanelBox.remove_all_transitions();
+      this._animationActive = false;
     }
 
-    this._stopMouseWatch();
+    this._stopPointerWatch();
     this._animationActive = true;
 
     PanelBox.ease({
@@ -93,21 +81,22 @@ export class PanelVisibilityManager {
       mode: Clutter.AnimationMode.EASE_OUT_QUAD,
       onComplete: () => {
         this._animationActive = false;
-        // Start mouse tracking if hidden due to intellihide or fullscreen
-        if (this._intellihide.overlaps || this._isFullscreen) {
-          this._startMouseWatch();
-        }
+        // Start watching so mouse at top edge can reveal the panel
+        this._startPointerWatch();
       },
     });
   }
 
   show(duration, trigger) {
     DEBUG(`show(${trigger})`);
+
+    // Cancel any in-progress animation
     if (this._animationActive) {
       PanelBox.remove_all_transitions();
+      this._animationActive = false;
     }
 
-    this._stopMouseWatch();
+    this._stopPointerWatch();
     this._animationActive = true;
     PanelBox.show();
 
@@ -117,94 +106,119 @@ export class PanelVisibilityManager {
       mode: Clutter.AnimationMode.EASE_OUT_QUAD,
       onComplete: () => {
         this._animationActive = false;
-        this._checkMouseAfterShow();
+        // Start watching so we know when the mouse leaves the panel area
+        this._startPointerWatch();
       },
     });
   }
 
-  _checkMouseAfterShow() {
-    const [x, y] = global.get_pointer();
-    const hideThreshold = this._panelHeight + 10; // Buffer below panel
-    if (y > hideThreshold && !this._isMouseOverPanel(x, y)) {
-      if (this._intellihide.overlaps || this._isFullscreen) {
-        this.hide(this._getAnimationTime(), "mouse-left");
-      }
-    } else {
-      if (this._intellihide.overlaps || this._isFullscreen) {
-        this._startMouseWatch();
-      }
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Pointer watching (event-driven via PointerWatcher, not a polling timer)
+  // ---------------------------------------------------------------------------
 
-  _isMouseOverPanel(x, y) {
-    return (
-      y >= this._baseY &&
-      y < this._baseY + this._panelHeight &&
-      x >= PanelBox.x &&
-      x < PanelBox.x + PanelBox.width
+  _startPointerWatch() {
+    if (this._pointerListener) return;
+    this._pointerListener = this._pointerWatcher.addWatch(
+      10,
+      this._handlePointer.bind(this),
     );
   }
 
-  _startMouseWatch() {
-    if (this._mouseWatchId) return;
-    this._mouseWatchId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-      this._handleMouseMove();
-      return GLib.SOURCE_CONTINUE;
-    });
-  }
-
-  _stopMouseWatch() {
-    if (this._mouseWatchId) {
-      GLib.source_remove(this._mouseWatchId);
-      this._mouseWatchId = 0;
+  _stopPointerWatch() {
+    if (this._pointerListener) {
+      this._pointerWatcher._removeWatch(this._pointerListener);
+      this._pointerListener = null;
     }
   }
 
-  _handleMouseMove() {
+  _handlePointer(x, y) {
     if (this._animationActive) return;
+    if (Main.panel.menuManager.activeMenu) return;
 
-    const [x, y] = global.get_pointer();
+    // Small tolerance for floating-point panel position
+    const panelVisible = PanelBox.y >= this._baseY - 1;
 
-    // Reference plugin style: small fixed pixel edge trigger
+    // How many px from the top edge trigger a show
     const SHOW_EDGE_PX = 2;
+    // How many px below the panel bottom before we consider the mouse gone
     const HIDE_THRESHOLD_PX = this._panelHeight + 10;
 
-    // If a menu is open, always keep panel visible
-    if (Main.panel.menuManager.activeMenu) {
-      if (!this._menuOpen) {
-        this._menuOpen = true;
-        this.show(0, "menu-open");
-      }
-      return;
-    } else {
-      this._menuOpen = false;
-    }
-
-    const panelVisible = PanelBox.y >= this._baseY;
-
     if (!panelVisible) {
-      // Panel hidden: show only if cursor touches top edge
-      if (y < SHOW_EDGE_PX) {
+      // Panel is hidden — reveal it when mouse touches the screen edge
+      if (y <= SHOW_EDGE_PX) {
         this.show(this._getAnimationTime(), "mouse-edge");
       }
     } else {
-      // Panel visible: hide if cursor leaves panel area
-      if (y > HIDE_THRESHOLD_PX && !this._isMouseOverPanel(x, y)) {
-        if (this._intellihide.overlaps || this._isFullscreen) {
-          this.hide(this._getAnimationTime(), "mouse-left");
-        }
+      // Panel is visible — hide only if conditions require it and mouse left
+      if (
+        y > HIDE_THRESHOLD_PX &&
+        (this._intellihide.overlaps || this._isFullscreen)
+      ) {
+        this.hide(this._getAnimationTime(), "mouse-left");
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Intellihide and fullscreen state
+  // ---------------------------------------------------------------------------
+
+  _handleIntellihideChange(overlaps) {
+    DEBUG(`overlap changed: ${overlaps}`);
+    if (overlaps) {
+      this.hide(this._getAnimationTime(), "intellihide");
+    } else if (!this._isFullscreen) {
+      this.show(this._getAnimationTime(), "intellihide");
+    }
+  }
+
+  _updateFullscreenState() {
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    this._isFullscreen = monitor?.inFullscreen ?? false;
+
+    if (this._isFullscreen) {
+      this.hide(this._getAnimationTime(), "fullscreen");
+    } else {
+      this._handleIntellihideChange(this._intellihide.overlaps);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per-window fullscreen signal tracking
+  // ---------------------------------------------------------------------------
+
+  _onWindowCreated(win) {
+    const id = win.connect("notify::fullscreen", () =>
+      this._updateFullscreenState(),
+    );
+    this._windowFullscreenSignals.set(win, id);
+
+    // Clean up when the window is removed so the Map doesn't grow unbounded
+    win.connect("unmanaged", () => {
+      const sid = this._windowFullscreenSignals.get(win);
+      if (sid !== undefined) {
+        try {
+          win.disconnect(sid);
+        } catch (e) {}
+        this._windowFullscreenSignals.delete(win);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Signal binding
+  // ---------------------------------------------------------------------------
 
   _bindUIChanges() {
     this._signalsHandler = new Convenience.GlobalSignalsHandler();
     this._signalsHandler.add(
+      // Track new windows for fullscreen state changes
       [
         global.display,
         "window-created",
-        (d, win) => this._onWindowCreated(win),
+        (_display, win) => this._onWindowCreated(win),
       ],
+      // Monitor transitions can affect fullscreen state
       [
         global.display,
         "window-left-monitor",
@@ -215,6 +229,7 @@ export class PanelVisibilityManager {
         "window-entered-monitor",
         () => this._updateFullscreenState(),
       ],
+      // Update geometry when monitors change
       [
         Main.layoutManager,
         "monitors-changed",
@@ -225,72 +240,86 @@ export class PanelVisibilityManager {
           this._intellihide.updateMonitor(Main.layoutManager.primaryIndex);
         },
       ],
+      // Update cached panel height if it changes (e.g. HiDPI scale changes)
       [
-        Main.panel.menuManager,
-        "notify::activeMenu",
+        PanelBox,
+        "notify::height",
         () => {
-          if (Main.panel.menuManager.activeMenu) {
-            this._menuOpen = true;
-            this.show(0, "menu-open");
-          } else {
-            this._menuOpen = false;
-            this._checkMouseAfterShow();
-          }
+          this._panelHeight = PanelBox.height;
+          this._intellihide.updatePanelHeight(this._panelHeight);
         },
+      ],
+      // Always show panel when overview opens
+      [
+        Main.overview,
+        "showing",
+        () => this.show(this._getAnimationTime(), "overview-showing"),
+      ],
+      // Re-evaluate after overview closes
+      [
+        Main.overview,
+        "hiding",
+        () => this._handleIntellihideChange(this._intellihide.overlaps),
       ],
     );
 
     this._updateFullscreenState();
   }
 
-  _onWindowCreated(win) {
-    const id = win.connect("notify::fullscreen", () => {
-      this._updateFullscreenState();
-    });
-    win._zenFullscreenSignal = id;
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  _getAnimationTime() {
+    // Settings value is in seconds; Clutter ease() expects milliseconds
+    return this._settings.get_double("animation-time") * 1000;
   }
 
-  _updateFullscreenState() {
-    const monitor = Main.layoutManager.monitors[this._monitorIndex];
-    this._isFullscreen = monitor?.inFullscreen || false;
-
-    if (this._isFullscreen) {
-      this.hide(this._getAnimationTime(), "fullscreen");
-    } else {
-      // Exit fullscreen, re-evaluate based on intellihide
-      this._handleIntellihideChange(this._intellihide.overlaps);
-    }
-  }
-
-  _bindSettingsChanges() {
-    this._settingsHandler = new Convenience.GlobalSignalsHandler();
-    this._settingsHandler.addWithLabel(
-      "settings",
-      [this._settings, "changed::animation-time", () => {}],
-      [
-        this._settings,
-        "changed::intellihide-threshold",
-        () => {
-          // Not used in this version, but keep for future
-        },
-      ],
-    );
-  }
+  // ---------------------------------------------------------------------------
+  // Destroy
+  // ---------------------------------------------------------------------------
 
   destroy() {
-    this._stopMouseWatch();
+    // 1. Cancel pending init idle to prevent callbacks after destroy
+    if (this._initIdleId) {
+      GLib.source_remove(this._initIdleId);
+      this._initIdleId = 0;
+    }
+
+    // 2. Disconnect all global signals first — nothing should fire after this
+    if (this._signalsHandler) {
+      this._signalsHandler.destroy();
+      this._signalsHandler = null;
+    }
+
+    // 3. Stop pointer watching
+    this._stopPointerWatch();
+
+    // 4. Disconnect the overlap-changed listener, then destroy intellihide
+    if (this._overlapChangedId) {
+      this._intellihide.disconnect(this._overlapChangedId);
+      this._overlapChangedId = 0;
+    }
     this._intellihide.destroy();
-    if (this._signalsHandler) this._signalsHandler.destroy();
-    if (this._settingsHandler) this._settingsHandler.destroy();
 
-    MessageTray._tween = this._oldTween;
+    // 5. Clean up per-window fullscreen signals for any open windows
+    for (const [win, id] of this._windowFullscreenSignals) {
+      try {
+        win.disconnect(id);
+      } catch (e) {}
+    }
+    this._windowFullscreenSignals.clear();
 
+    // 6. Restore panel to visible state immediately (no animation)
+    PanelBox.remove_all_transitions();
+    PanelBox.show();
+    PanelBox.y = this._baseY;
+
+    // 7. Restore original chrome settings
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: true,
       trackFullscreen: true,
     });
-
-    this.show(0, "destroy");
   }
 }

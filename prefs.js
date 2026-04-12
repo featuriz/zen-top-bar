@@ -13,7 +13,6 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
       title: "Behavior",
     });
 
-    // Animation time
     const animationRow = new Adw.ActionRow({
       title: "Animation duration",
       subtitle: "Time in seconds for show/hide animations",
@@ -35,30 +34,6 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     );
     animationRow.add_suffix(animationSpin);
     group.add(animationRow);
-
-    // Intellihide threshold (kept for future, not used currently)
-    const thresholdRow = new Adw.ActionRow({
-      title: "Hide threshold (unused)",
-      subtitle: "Currently fixed to panel height",
-    });
-    const thresholdSpin = new Gtk.SpinButton({
-      adjustment: new Gtk.Adjustment({
-        lower: 0.01,
-        upper: 0.5,
-        step_increment: 0.01,
-      }),
-      digits: 2,
-      valign: Gtk.Align.CENTER,
-      sensitive: false,
-    });
-    settings.bind(
-      "intellihide-threshold",
-      thresholdSpin,
-      "value",
-      Gio.SettingsBindFlags.DEFAULT,
-    );
-    thresholdRow.add_suffix(thresholdSpin);
-    group.add(thresholdRow);
 
     page.add(group);
     window.add(page);

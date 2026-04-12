@@ -9,34 +9,39 @@ import * as Convenience from "./convenience.js";
 
 const DEBUG = Convenience.DEBUG;
 
-export const Intellihide = class Intellihide extends Signals.EventEmitter {
+export class Intellihide extends Signals.EventEmitter {
   constructor(settings, monitorIndex, panelHeight) {
     super();
     this._settings = settings;
     this._monitorIndex = monitorIndex;
-    this._panelHeight = panelHeight; // Pixel height of the top bar
+    this._panelHeight = panelHeight;
     this._overlaps = false;
     this._checkTimeoutId = 0;
     this._enabled = false;
+    this._idleId = 0;
 
     this._signalsHandler = new Convenience.GlobalSignalsHandler();
     this._tracker = Shell.WindowTracker.get_default();
 
-    // Defer signal connections to idle
-    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-      if (this._signalsHandler) {
-        this._signalsHandler.add(
-          [global.display, "window-created", this._onWindowCreated.bind(this)],
-          [global.display, "grab-op-end", this._checkOverlap.bind(this)],
-          [global.display, "restacked", this._checkOverlap.bind(this)],
-          [this._tracker, "notify::focus-app", this._checkOverlap.bind(this)],
-          [
-            global.workspace_manager,
-            "notify::active-workspace",
-            this._checkOverlap.bind(this),
-          ],
-        );
-      }
+    // Map<MetaWindow, signalId[]> — tracked so we can clean up on destroy
+    this._windowSignals = new Map();
+
+    // Defer signal connections to ensure the shell is fully ready
+    this._idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+      this._idleId = 0;
+      if (!this._signalsHandler) return GLib.SOURCE_REMOVE;
+
+      this._signalsHandler.add(
+        [global.display, "window-created", this._onWindowCreated.bind(this)],
+        [global.display, "grab-op-end", this._checkOverlap.bind(this)],
+        [global.display, "restacked", this._checkOverlap.bind(this)],
+        [this._tracker, "notify::focus-app", this._checkOverlap.bind(this)],
+        [
+          global.workspace_manager,
+          "notify::active-workspace",
+          this._checkOverlap.bind(this),
+        ],
+      );
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -54,13 +59,13 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
     }
   }
 
+  get overlaps() {
+    return this._overlaps;
+  }
+
   updatePanelHeight(height) {
     this._panelHeight = height;
     this._checkOverlap();
-  }
-
-  get overlaps() {
-    return this._overlaps;
   }
 
   updateMonitor(monitorIndex) {
@@ -71,20 +76,28 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
   _onWindowCreated(display, win) {
     const id1 = win.connect("position-changed", this._checkOverlap.bind(this));
     const id2 = win.connect("size-changed", this._checkOverlap.bind(this));
-    win._zenSignals = [id1, id2];
-    win.connect("unmanaged", () => {
-      if (win._zenSignals) {
-        win.disconnect(win._zenSignals[0]);
-        win.disconnect(win._zenSignals[1]);
-        delete win._zenSignals;
-      }
-    });
+    this._windowSignals.set(win, [id1, id2]);
+
+    win.connect("unmanaged", () => this._removeWindowSignals(win));
     this._checkOverlap();
+  }
+
+  _removeWindowSignals(win) {
+    const ids = this._windowSignals.get(win);
+    if (ids) {
+      for (const id of ids) {
+        try {
+          win.disconnect(id);
+        } catch (e) {}
+      }
+      this._windowSignals.delete(win);
+    }
   }
 
   _checkOverlap() {
     if (!this._enabled) return;
 
+    // Debounce: cancel pending check and reschedule
     if (this._checkTimeoutId) {
       GLib.source_remove(this._checkTimeoutId);
     }
@@ -101,9 +114,7 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
     const monitor = Main.layoutManager.monitors[this._monitorIndex];
     if (!monitor) return;
 
-    // Threshold is exactly the panel height (10 units)
     const topBoundary = monitor.y + this._panelHeight;
-
     let overlaps = false;
     const windows = global.get_window_actors();
 
@@ -114,7 +125,6 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
       if (!this._isWindowRelevant(win)) continue;
 
       const rect = win.get_frame_rect();
-      // Check if window top edge overlaps the top bar area
       if (rect.y < topBoundary) {
         overlaps = true;
         break;
@@ -136,19 +146,38 @@ export const Intellihide = class Intellihide extends Signals.EventEmitter {
       Meta.WindowType.UTILITY,
     ];
     if (!handledTypes.includes(type)) return false;
-
     if (win.is_skip_taskbar()) return false;
 
-    const activeWorkspace =
-      global.workspace_manager.get_active_workspace_index();
-    const winWorkspace = win.get_workspace();
-    if (!winWorkspace || winWorkspace.index() !== activeWorkspace) return false;
+    // More accurate than workspace index comparison — handles sticky windows too
+    if (!win.showing_on_its_workspace()) return false;
 
     return true;
   }
 
   destroy() {
+    // 1. Cancel pending idle before anything else
+    if (this._idleId) {
+      GLib.source_remove(this._idleId);
+      this._idleId = 0;
+    }
+
+    // 2. Stop overlap checking timeout
     this.disable();
-    if (this._signalsHandler) this._signalsHandler.destroy();
+
+    // 3. Clean up per-window signals for all currently open windows
+    for (const [win, ids] of this._windowSignals) {
+      for (const id of ids) {
+        try {
+          win.disconnect(id);
+        } catch (e) {}
+      }
+    }
+    this._windowSignals.clear();
+
+    // 4. Disconnect global signals
+    if (this._signalsHandler) {
+      this._signalsHandler.destroy();
+      this._signalsHandler = null;
+    }
   }
-};
+}

@@ -32,9 +32,6 @@ export default class ZenTopBarExtension extends Extension {
   enable() {
     DEBUG("enable()");
     this._settings = this.getSettings();
-    if (this._pvManager) {
-      this._pvManager.destroy();
-    }
     this._pvManager = new PanelVisibilityManager(
       this._settings,
       Main.layoutManager.primaryIndex,

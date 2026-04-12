@@ -6,10 +6,5 @@
       <summary>Animation duration</summary>
       <description>Time in seconds for panel show/hide animations.</description>
     </key>
-    <key name="intellihide-threshold" type="d">
-      <default>0.1</default>
-      <summary>Hide threshold</summary>
-      <description>Fraction of screen height from top to trigger panel hide (0.1 = 10%).</description>
-    </key>
   </schema>
 </schemalist>
