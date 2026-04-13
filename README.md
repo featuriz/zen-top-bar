@@ -32,42 +32,56 @@ Built from the ground up for **GNOME Shell 50** using modern ES modules, proper 
 
 ---
 
+## Screenshots
+
+<div style="display: flex; overflow-x: auto; gap: 10px;">
+  <img src="screenshots/01-before.png" width="300" alt="Before">
+  <img src="screenshots/02-installed_active.png" width="300" alt="Installed and Active">
+  <img src="screenshots/03-on_window_position-topbar_hidden.png" width="300" alt="On window positioned, topar hides">
+  <img src="screenshots/04-on_window_position-topbar_visible_on_mouse.png" width="300" alt="Reveal topbar by mouse trigger">
+  <img src="screenshots/05-fullscreen_window_topbar_hidden.png" width="300" alt="Full-Screen window topbar hidden">
+  <img src="screenshots/06-fullscreen_window_topbar_visible.png" width="300" alt="Full-Screen window topbar visible by mouse">
+  <img src="screenshots/07-settings.png" width="300" alt="Settings">
+</div>
+
+---
+
 ## ✨ Features
 
-| Feature | Description |
-| :--- | :--- |
-| 🧠 **Smart Window Detection** | Panel hides automatically when any window is positioned against the top screen edge. |
-| 🎨 **Panel Color** | Set a custom background color for the panel. |
-| 💧 **Adaptive Transparency** | Panel is fully transparent on a clear desktop, and becomes opaque when a window is behind it — both values are independently configurable. |
-| 🖱️ **Edge-Triggered Reveal** | Bump your cursor against the top edge (within 2 px) to show the panel. |
-| 🖥️ **Full-Screen Aware** | Panel stays hidden in full-screen applications. |
-| 📋 **Menu-Safe** | Panel stays visible while any system menu is open, preventing accidental hiding. |
-| ✨ **Smooth Animations** | Fluid easing transitions with configurable duration. |
-| ⚡ **Performance Optimized** | Event-driven pointer watching (no polling), debounced overlap checks, and proper signal/resource cleanup. |
-| 🌍 **Wayland & X11** | Fully compatible with both display servers. |
+| Feature                       | Description                                                                                                                                |
+| :---------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------- |
+| 🧠 **Smart Window Detection** | Panel hides automatically when any window is positioned against the top screen edge.                                                       |
+| 🎨 **Panel Color**            | Set a custom background color for the panel.                                                                                               |
+| 💧 **Adaptive Transparency**  | Panel is fully transparent on a clear desktop, and becomes opaque when a window is behind it — both values are independently configurable. |
+| 🖱️ **Edge-Triggered Reveal**  | Bump your cursor against the top edge (within 2 px) to show the panel.                                                                     |
+| 🖥️ **Full-Screen Aware**      | Panel stays hidden in full-screen applications.                                                                                            |
+| 📋 **Menu-Safe**              | Panel stays visible while any system menu is open, preventing accidental hiding.                                                           |
+| ✨ **Smooth Animations**      | Fluid easing transitions with configurable duration.                                                                                       |
+| ⚡ **Performance Optimized**  | Event-driven pointer watching (no polling), debounced overlap checks, and proper signal/resource cleanup.                                  |
+| 🌍 **Wayland & X11**          | Fully compatible with both display servers.                                                                                                |
 
 ---
 
 ## 🚀 Supported GNOME Versions
 
-| Version | Status |
-| :--- | :--- |
-| **GNOME 50** | ✅ Fully supported and tested |
-| GNOME 47–49 | ✅ Compatible (limited testing) |
-| GNOME 46 | ⚠️ May work with minor issues |
-| GNOME 45 and older | ❌ Not supported |
+| Version            | Status                          |
+| :----------------- | :------------------------------ |
+| **GNOME 50**       | ✅ Fully supported and tested   |
+| GNOME 47–49        | ✅ Compatible (limited testing) |
+| GNOME 46           | ⚠️ May work with minor issues   |
+| GNOME 45 and older | ❌ Not supported                |
 
 ---
 
 ## 🧪 Tested Environments
 
-| Distribution | GNOME Version | Windowing System | Status |
-| :--- | :--- | :--- | :--- |
-| Arch Linux | 50.4 | Wayland | ✅ Fully functional |
-| Arch Linux | 50.4 | X11 | ✅ Fully functional |
-| Fedora 42 | 50.0 | Wayland | ✅ Fully functional |
-| Ubuntu 25.04 | 50.1 | Wayland | ✅ Fully functional |
-| openSUSE Tumbleweed | 50.2 | Wayland | ✅ Fully functional |
+| Distribution        | GNOME Version | Windowing System | Status              |
+| :------------------ | :------------ | :--------------- | :------------------ |
+| Arch Linux          | 50.4          | Wayland          | ✅ Fully functional |
+| Arch Linux          | 50.4          | X11              | ✅ Fully functional |
+| Fedora 42           | 50.0          | Wayland          | ✅ Fully functional |
+| Ubuntu 25.04        | 50.1          | Wayland          | ✅ Fully functional |
+| openSUSE Tumbleweed | 50.2          | Wayland          | ✅ Fully functional |
 
 If you encounter issues on a different setup, please [open an issue](https://github.com/featuriz/zen-top-bar/issues).
 
@@ -114,17 +128,17 @@ gnome-extensions prefs zentopbar@featuriz.in
 
 ### Behavior
 
-| Setting | Description | Default |
-| :--- | :--- | :--- |
-| **Animation Duration** | Speed of the show/hide slide animation (seconds). | `0.2` |
+| Setting                | Description                                       | Default |
+| :--------------------- | :------------------------------------------------ | :------ |
+| **Animation Duration** | Speed of the show/hide slide animation (seconds). | `0.2`   |
 
 ### Appearance
 
-| Setting | Description | Default |
-| :--- | :--- | :--- |
-| **Panel Color** | Background color of the panel (`#rrggbb`). | `#000000` |
-| **Opacity when clear** | Panel opacity when no window is behind it. `0.0` = invisible. | `0.0` |
-| **Opacity when overlapped** | Panel opacity when a window is behind the panel. | `0.85` |
+| Setting                     | Description                                                   | Default   |
+| :-------------------------- | :------------------------------------------------------------ | :-------- |
+| **Panel Color**             | Background color of the panel (`#rrggbb`).                    | `#000000` |
+| **Opacity when clear**      | Panel opacity when no window is behind it. `0.0` = invisible. | `0.0`     |
+| **Opacity when overlapped** | Panel opacity when a window is behind the panel.              | `0.85`    |
 
 > **Tip:** Setting "Opacity when clear" to `0.0` makes the panel completely invisible on a clean desktop — the wallpaper shows through fully. The panel only becomes visible when a window pushes against the top edge or your cursor reaches the screen edge.
 
@@ -132,13 +146,13 @@ gnome-extensions prefs zentopbar@featuriz.in
 
 ## 🐛 Troubleshooting
 
-| Symptom | Solution |
-| :--- | :--- |
-| Panel does not hide when a window touches the top | Ensure no system menu is open. Try moving the window slightly to trigger re-evaluation. |
+| Symptom                                                | Solution                                                                                                                            |
+| :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- |
+| Panel does not hide when a window touches the top      | Ensure no system menu is open. Try moving the window slightly to trigger re-evaluation.                                             |
 | Panel does not appear when cursor touches the top edge | Move the cursor all the way to the screen edge (within 2 px). On multi-monitor setups, ensure the cursor is on the primary display. |
-| Panel is invisible and not responding | Your opacity settings may both be at `0.0`. Open prefs and raise "Opacity when clear". |
-| Extension fails to load after GNOME Shell restart | Check logs: `journalctl -f -o cat /usr/bin/gnome-shell` and look for `zentopbar`. |
-| Panel flickers when a menu is open | Known GNOME Shell behavior in some themes. The extension includes mitigations but minor flicker may still occur. |
+| Panel is invisible and not responding                  | Your opacity settings may both be at `0.0`. Open prefs and raise "Opacity when clear".                                              |
+| Extension fails to load after GNOME Shell restart      | Check logs: `journalctl -f -o cat /usr/bin/gnome-shell` and look for `zentopbar`.                                                   |
+| Panel flickers when a menu is open                     | Known GNOME Shell behavior in some themes. The extension includes mitigations but minor flicker may still occur.                    |
 
 If problems persist, please [report a bug](https://github.com/featuriz/zen-top-bar/issues/new?template=bug_report.md).
 
