@@ -148,7 +148,14 @@ export class Intellihide extends Signals.EventEmitter {
     if (!handledTypes.includes(type)) return false;
     if (win.is_skip_taskbar()) return false;
 
-    // More accurate than workspace index comparison — handles sticky windows too
+    // Both checks are required together:
+    // - workspace index alone misses sticky/always-on-top windows
+    // - showing_on_its_workspace() alone is unreliable for fullscreen windows
+    //   and during workspace transitions — windows on other workspaces can
+    //   incorrectly pass the filter, causing the panel to hide on the wrong workspace
+    const activeWsIndex = global.workspace_manager.get_active_workspace_index();
+    const winWorkspace = win.get_workspace();
+    if (!winWorkspace || winWorkspace.index() !== activeWsIndex) return false;
     if (!win.showing_on_its_workspace()) return false;
 
     return true;

@@ -17,26 +17,23 @@ export class PanelVisibilityManager {
     this._baseY = PanelBox.y;
     this._panelHeight = PanelBox.height;
     this._animationActive = false;
-    this._panelAtRest = false; // true only when panel is fully visible and not animating
-    this._isFullscreen = false;
+    this._panelAtRest = false;
     this._initIdleId = 0;
     this._overlapChangedId = 0;
 
-    // Event-driven pointer watching (replaces 50ms polling)
+    // Event-driven pointer watching
     this._pointerWatcher = PointerWatcher.getPointerWatcher();
     this._pointerListener = null;
 
-    // Map<MetaWindow, signalId> for fullscreen signal cleanup
-    this._windowFullscreenSignals = new Map();
-
-    // Adjust panel chrome so it doesn't reserve strut space
+    // Adjust panel chrome so it doesn't reserve strut space.
+    // trackFullscreen: true lets GNOME handle fullscreen hiding automatically,
+    // workspace-aware — no manual fullscreen tracking needed.
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: false,
       trackFullscreen: true,
     });
 
-    // Initialize intellihide and store the signal ID for proper cleanup
     this._intellihide = new Intellihide(
       settings,
       monitorIndex,
@@ -47,7 +44,6 @@ export class PanelVisibilityManager {
       (_obj, overlaps) => this._handleIntellihideChange(overlaps),
     );
 
-    // Defer UI binding to ensure the shell is fully ready
     this._initIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._initIdleId = 0;
       this._bindSettingsChanges();
@@ -187,11 +183,8 @@ export class PanelVisibilityManager {
         this.show(this._getAnimationTime(), "mouse-edge");
       }
     } else {
-      // Panel is visible — hide only if conditions require it and mouse left
-      if (
-        y > HIDE_THRESHOLD_PX &&
-        (this._intellihide.overlaps || this._isFullscreen)
-      ) {
+      // Panel is visible — hide only if intellihide requires it and mouse left
+      if (y > HIDE_THRESHOLD_PX && this._intellihide.overlaps) {
         this.hide(this._getAnimationTime(), "mouse-left");
       }
     }
@@ -205,51 +198,9 @@ export class PanelVisibilityManager {
     DEBUG(`overlap changed: ${overlaps}`);
     if (overlaps) {
       this.hide(this._getAnimationTime(), "intellihide");
-    } else if (!this._isFullscreen) {
+    } else {
       this.show(this._getAnimationTime(), "intellihide");
     }
-  }
-
-  _updateFullscreenState() {
-    // monitor.inFullscreen is monitor-level: it's true if ANY workspace on that
-    // monitor has a fullscreen window. We must check the active workspace only.
-    const activeWorkspace = global.workspace_manager.get_active_workspace();
-    this._isFullscreen = activeWorkspace
-      .list_windows()
-      .some(
-        (win) =>
-          win.get_monitor() === this._monitorIndex &&
-          win.is_fullscreen() &&
-          !win.minimized,
-      );
-
-    if (this._isFullscreen) {
-      this.hide(this._getAnimationTime(), "fullscreen");
-    } else {
-      this._handleIntellihideChange(this._intellihide.overlaps);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Per-window fullscreen signal tracking
-  // ---------------------------------------------------------------------------
-
-  _onWindowCreated(win) {
-    const id = win.connect("notify::fullscreen", () =>
-      this._updateFullscreenState(),
-    );
-    this._windowFullscreenSignals.set(win, id);
-
-    // Clean up when the window is removed so the Map doesn't grow unbounded
-    win.connect("unmanaged", () => {
-      const sid = this._windowFullscreenSignals.get(win);
-      if (sid !== undefined) {
-        try {
-          win.disconnect(sid);
-        } catch (e) {}
-        this._windowFullscreenSignals.delete(win);
-      }
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -277,23 +228,6 @@ export class PanelVisibilityManager {
   _bindUIChanges() {
     this._signalsHandler = new Convenience.GlobalSignalsHandler();
     this._signalsHandler.add(
-      // Track new windows for fullscreen state changes
-      [
-        global.display,
-        "window-created",
-        (_display, win) => this._onWindowCreated(win),
-      ],
-      // Monitor transitions can affect fullscreen state
-      [
-        global.display,
-        "window-left-monitor",
-        () => this._updateFullscreenState(),
-      ],
-      [
-        global.display,
-        "window-entered-monitor",
-        () => this._updateFullscreenState(),
-      ],
       // Update geometry when monitors change
       [
         Main.layoutManager,
@@ -314,12 +248,6 @@ export class PanelVisibilityManager {
           this._intellihide.updatePanelHeight(this._panelHeight);
         },
       ],
-      // Re-evaluate fullscreen state on workspace switch
-      [
-        global.workspace_manager,
-        "workspace-switched",
-        () => this._updateFullscreenState(),
-      ],
       // Always show panel when overview opens
       [
         Main.overview,
@@ -333,8 +261,6 @@ export class PanelVisibilityManager {
         () => this._handleIntellihideChange(this._intellihide.overlaps),
       ],
     );
-
-    this._updateFullscreenState();
   }
 
   // ---------------------------------------------------------------------------
@@ -377,15 +303,7 @@ export class PanelVisibilityManager {
     }
     this._intellihide.destroy();
 
-    // 5. Clean up per-window fullscreen signals for any open windows
-    for (const [win, id] of this._windowFullscreenSignals) {
-      try {
-        win.disconnect(id);
-      } catch (e) {}
-    }
-    this._windowFullscreenSignals.clear();
-
-    // 6. Restore panel style, position, and chrome
+    // 5. Restore panel style, position, and chrome
     Main.panel.set_style(null);
     PanelBox.remove_all_transitions();
     PanelBox.show();
