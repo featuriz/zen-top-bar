@@ -211,8 +211,17 @@ export class PanelVisibilityManager {
   }
 
   _updateFullscreenState() {
-    const monitor = Main.layoutManager.monitors[this._monitorIndex];
-    this._isFullscreen = monitor?.inFullscreen ?? false;
+    // monitor.inFullscreen is monitor-level: it's true if ANY workspace on that
+    // monitor has a fullscreen window. We must check the active workspace only.
+    const activeWorkspace = global.workspace_manager.get_active_workspace();
+    this._isFullscreen = activeWorkspace
+      .list_windows()
+      .some(
+        (win) =>
+          win.get_monitor() === this._monitorIndex &&
+          win.is_fullscreen() &&
+          !win.minimized,
+      );
 
     if (this._isFullscreen) {
       this.hide(this._getAnimationTime(), "fullscreen");
@@ -304,6 +313,12 @@ export class PanelVisibilityManager {
           this._panelHeight = PanelBox.height;
           this._intellihide.updatePanelHeight(this._panelHeight);
         },
+      ],
+      // Re-evaluate fullscreen state on workspace switch
+      [
+        global.workspace_manager,
+        "workspace-switched",
+        () => this._updateFullscreenState(),
       ],
       // Always show panel when overview opens
       [
