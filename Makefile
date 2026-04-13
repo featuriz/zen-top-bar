@@ -29,8 +29,7 @@ zip:
 
 install: zip
 	@echo "Installing extension to $(EXT_DIR)"
-	mkdir -p $(EXT_DIR)
-	unzip -q $(ZIP_NAME) -d $(EXT_DIR)
+	gnome-extensions install $(ZIP_NAME) --force
 
 clean:
 	rm -f $(ZIP_NAME) schemas/gschemas.compiled
