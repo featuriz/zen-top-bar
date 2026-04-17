@@ -86,7 +86,7 @@ export class PanelVisibilityManager {
     const maxY = monitor.height - panelHeight;
     const targetY = (maxY * position) / 100;
     // Move the panel
-    PanelBox.y = targetY;
+    PanelBox.translation_y = targetY;
   }
 
   destroy() {
@@ -109,7 +109,7 @@ export class PanelVisibilityManager {
     this._settings.set_boolean("show-indicator", true);
     this._settings.set_int("panel-position", 0);
     PanelBox.visible = true;
-    PanelBox.y = 0;
+    PanelBox.translation_y = 0;
 
     DEBUG("---ZEN TOP BAR DESTROYED---");
   }
