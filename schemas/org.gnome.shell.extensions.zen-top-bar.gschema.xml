@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.zen-top-bar" path="/org/gnome/shell/extensions/zen-top-bar/">
+    <key name="show-indicator" type="b">
+      <default>true</default>
+      <summary>Enable auto-hide</summary>
+      <description>Safety toggle. Turn off to always show panel.</description>
+    </key>
+  </schema>
+</schemalist>

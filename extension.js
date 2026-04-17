@@ -15,12 +15,29 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
+import { DEBUG } from "./utils.js";
+import { PanelVisibilityManager } from "./panelVisibilityManager.js";
 
-export default class PlainExampleExtension extends Extension {
-    enable() {
-    }
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-    disable() {
-    }
+export default class ZenTopBarExtension extends Extension {
+  constructor(metadata) {
+    super(metadata);
+    DEBUG(`Initializing ${this.uuid}`);
+  }
+
+  enable() {
+    DEBUG(`Enabling ${this.uuid}`);
+    this._pvManager = new PanelVisibilityManager(
+      this.getSettings(),
+      Main.layoutManager.primaryIndex,
+    );
+  }
+
+  disable() {
+    DEBUG(`Disabling ${this.uuid}`);
+    this._pvManager.destroy();
+    this._pvManager = null;
+  }
 }
