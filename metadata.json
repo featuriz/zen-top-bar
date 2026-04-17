@@ -1,0 +1,8 @@
+{
+  "name": "Zen Top Bar",
+  "description": "Auto-hide the top bar for a cleaner workspace.",
+  "uuid": "zentopbar@featuriz.in",
+  "shell-version": [
+    "50"
+  ]
+}
