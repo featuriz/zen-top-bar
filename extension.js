@@ -24,7 +24,7 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 export default class ZenTopBarExtension extends Extension {
   constructor(metadata) {
     super(metadata);
-    DEBUG(`Initializing ${this.uuid}`);
+    DEBUG(`Constructing ${this.uuid}`);
   }
 
   enable() {

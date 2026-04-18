@@ -25,3 +25,6 @@ clean:
 	rm -f $(ZIP_NAME) schemas/gschemas.compiled
 	rm -rf $(EXT_DIR)
 	@echo "Extension uninstalled. Please restart GNOME Shell."
+
+test: clean install
+	dbus-run-session gnome-shell --devkit --wayland
