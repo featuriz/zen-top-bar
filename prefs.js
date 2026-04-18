@@ -44,15 +44,15 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     group.add(panelPositionRow);
 
     // Create a settings object and bind the row to the `show-indicator` key
-    window._settings = this.getSettings();
-    window._settings.bind(
+    const settings = this.getSettings();
+    settings.bind(
       "show-indicator",
       row,
       "active",
       Gio.SettingsBindFlags.DEFAULT,
     );
 
-    window._settings.bind(
+    settings.bind(
       "panel-position",
       panelPositionRow,
       "value",
