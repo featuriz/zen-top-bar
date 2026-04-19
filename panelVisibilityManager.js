@@ -1,6 +1,8 @@
+import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
 
 import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
 
@@ -64,7 +66,7 @@ export class PanelVisibilityManager {
     });
   }
 
-  // FIX NOTIFICATION
+  // FIX NOTIFICATION - monkey patch
   _fixNotification() {
     DEBUG("--- APPLYING NOTIFICATION FIX ---");
 
@@ -132,7 +134,21 @@ export class PanelVisibilityManager {
     const maxY = monitor.height - this._panelHeight;
     const targetY = (maxY * position) / 100;
     // Move the panel
-    PanelBox.translation_y = targetY;
+    // PanelBox.translation_y = targetY;
+    this._transition(targetY);
+  }
+
+  async _transition(targetY) {
+    try {
+      PanelBox.remove_all_transitions();
+      await PanelBox.easeAsync({
+        translation_y: targetY,
+        duration: 250,
+        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+      });
+    } catch (e) {
+      logErrorUnlessCancelled(e);
+    }
   }
 
   destroy() {
