@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.zen-top-bar" path="/org/gnome/shell/extensions/zen-top-bar/">
-<<<<<<< HEAD
+
+    <!-- General -->
+
+    <key name="enable" type="b">
     <key name="show-indicator" type="b">
       <default>true</default>
       <summary>Enable auto-hide</summary>
@@ -15,7 +18,6 @@
         Position of the panel as a percentage of screen height (0 = top, 100 = bottom).
       </description>
     </key>
-=======
 
     <!-- Behavior -->
 
@@ -45,6 +47,5 @@
       <description>Panel opacity (0.0–1.0) when a window is behind the panel area.</description>
     </key>
 
->>>>>>> origin/main
   </schema>
 </schemalist>

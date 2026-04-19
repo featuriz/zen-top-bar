@@ -16,7 +16,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
-<<<<<<< HEAD
 import { DEBUG } from "./utils.js";
 import { PanelVisibilityManager } from "./panelVisibilityManager.js";
 
@@ -32,42 +31,13 @@ export default class ZenTopBarExtension extends Extension {
     DEBUG(`Enabling ${this.uuid}`);
     this._pvManager = new PanelVisibilityManager(
       this.getSettings(),
-=======
-import * as Main from "resource:///org/gnome/shell/ui/main.js";
-
-import { PanelVisibilityManager } from "./panelVisibilityManager.js";
-import * as Convenience from "./convenience.js";
-
-const DEBUG = Convenience.DEBUG;
-
-export default class ZenTopBarExtension extends Extension {
-  constructor(metadata) {
-    super(metadata);
-    console.log(`ZenTopBar: Initiating ${this.uuid}`);
-  }
-
-  enable() {
-    DEBUG("enable()");
-    this._settings = this.getSettings();
-    this._pvManager = new PanelVisibilityManager(
-      this._settings,
->>>>>>> origin/main
       Main.layoutManager.primaryIndex,
     );
   }
 
   disable() {
-<<<<<<< HEAD
     DEBUG(`Disabling ${this.uuid}`);
     this._pvManager.destroy();
     this._pvManager = null;
-=======
-    DEBUG("disable()");
-    if (this._pvManager) {
-      this._pvManager.destroy();
-      this._pvManager = null;
-    }
-    this._settings = null;
->>>>>>> origin/main
   }
 }

@@ -5,11 +5,7 @@
   "shell-version": ["50"],
   "version": 1,
   "url": "https://github.com/featuriz/zen-top-bar.git",
-<<<<<<< HEAD
   "settings-schema": "org.gnome.shell.extensions.zen-top-bar",
   "session-modes": ["user"],
   "type": "shell-extension"
-=======
-  "settings-schema": "org.gnome.shell.extensions.zen-top-bar"
->>>>>>> origin/main
 }

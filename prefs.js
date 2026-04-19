@@ -1,207 +1,162 @@
-import Adw from "gi://Adw";
-<<<<<<< HEAD
-import Gio from "gi://Gio";
-import Gtk from "gi://Gtk";
+import GLib from "gi://GLib";
 
-import {
-  ExtensionPreferences,
-  gettext as _,
-} from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-export default class ZenTopBarPreferences extends ExtensionPreferences {
-  fillPreferencesWindow(window) {
-    const page = new Adw.PreferencesPage({
-      title: _("General"),
-      icon_name: "dialog-information-symbolic",
+import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
+
+const MessageTray = Main.messageTray;
+const PanelBox = Main.layoutManager.panelBox;
+
+export class PanelVisibilityManager {
+  constructor(settings, monitorIndex) {
+    this._settings = settings;
+    this._monitorIndex = monitorIndex;
+    this._panelHeight = PanelBox.height || 30;
+    this._signalsHandler = new GlobalSignalsHandler();
+    this._originalUpdateState = MessageTray._updateState;
+
+    // Defer setup to ensure shell is fully ready
+    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+      this._setup();
+      this._fixNotification();
+      return GLib.SOURCE_REMOVE;
     });
-    window.add(page);
+  }
 
-    const group = new Adw.PreferencesGroup({
-      title: _("Appearance"),
-      description: _("Configure the appearance of the extension"),
+  _setup() {
+    DEBUG("---ZEN TOP BAR INITIALIZED---");
+
+    // When ready update panel height
+    this._signalsHandler.add(PanelBox, "notify::allocation", () => {
+      this._syncPanelHeight();
     });
-    page.add(group);
 
-    // Visibility
-    const row = new Adw.SwitchRow({
-      title: _("Visibility"),
-      subtitle: _("Whether to show the panel (topbar)"),
-    });
-    group.add(row);
-
-    // Panel Position
-    const panelPositionRow = new Adw.SpinRow({
-      title: _("Panel Position"),
-      subtitle: _(
-        "0 = top, 100 = bottom. Based on screen height. For testing only.",
-      ),
-      adjustment: new Gtk.Adjustment({
-        lower: 0,
-        upper: 100,
-        step_increment: 1,
-      }),
-      snap_to_ticks: true,
-    });
-    group.add(panelPositionRow);
-
-    // Create a settings object and bind the row to the `show-indicator` key
-    const settings = this.getSettings();
-    settings.bind(
-      "show-indicator",
-      row,
-      "active",
-      Gio.SettingsBindFlags.DEFAULT,
+    // Sync visibility from settings
+    this._signalsHandler.add(
+      this._settings,
+      "changed::show-indicator",
+      (settings, key) => {
+        DEBUG(`${key} = ${settings.get_value(key).print(true)}`);
+        this._syncVisibility();
+        this._onToggleShowNotification();
+      },
     );
 
-    settings.bind(
-      "panel-position",
-      panelPositionRow,
-      "value",
-      Gio.SettingsBindFlags.DEFAULT,
+    // Update panel position from settings
+    this._signalsHandler.add(
+      this._settings,
+      "changed::panel-position",
+      (settings, key) => {
+        this._updatePanelPosition(settings.get_int(key));
+      },
     );
-=======
-import Gdk from "gi://Gdk";
-import Gtk from "gi://Gtk";
-import Gio from "gi://Gio";
 
-import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
-
-export default class ZenTopBarPreferences extends ExtensionPreferences {
-  fillPreferencesWindow(window) {
-    const settings = this.getSettings();
-
-    // -------------------------------------------------------------------------
-    // Behavior group
-    // -------------------------------------------------------------------------
-
-    const behaviorGroup = new Adw.PreferencesGroup({ title: "Behavior" });
-
-    const animationRow = new Adw.ActionRow({
-      title: "Animation duration",
-      subtitle: "Time in seconds for show/hide animations",
-    });
-    const animationSpin = new Gtk.SpinButton({
-      adjustment: new Gtk.Adjustment({
-        lower: 0.0,
-        upper: 2.0,
-        step_increment: 0.1,
-      }),
-      digits: 1,
-      valign: Gtk.Align.CENTER,
-    });
-    settings.bind(
-      "animation-time",
-      animationSpin,
-      "value",
-      Gio.SettingsBindFlags.DEFAULT,
-    );
-    animationRow.add_suffix(animationSpin);
-    behaviorGroup.add(animationRow);
-
-    // -------------------------------------------------------------------------
-    // Appearance group
-    // -------------------------------------------------------------------------
-
-    const appearanceGroup = new Adw.PreferencesGroup({ title: "Appearance" });
-
-    // --- Panel color ---------------------------------------------------------
-
-    const colorRow = new Adw.ActionRow({
-      title: "Panel color",
-      subtitle: "Background color applied to the panel",
+    // Monitor changed - TODOS
+    this._signalsHandler.add(Main.layoutManager, "monitors-changed", () => {
+      this._onMonitorsChanged.bind(this);
+      this._syncPanelHeight();
     });
 
-    const colorDialog = new Gtk.ColorDialog({ modal: true });
-    const colorButton = new Gtk.ColorDialogButton({
-      dialog: colorDialog,
-      valign: Gtk.Align.CENTER,
+    Main.layoutManager.removeChrome(PanelBox); // Remove default panel
+    Main.layoutManager.addChrome(PanelBox, {
+      affectsStruts: false, // Panel doesn't affect struts
+      trackFullscreen: true, // Panel doesn't track fullscreen
+    });
+  }
+
+  // FIX NOTIFICATION
+  _fixNotification() {
+    DEBUG("--- APPLYING NOTIFICATION FIX ---");
+
+    MessageTray._updateState = () => {
+      // Execute original logic first to let the shell decide show/hide status
+      this._originalUpdateState.call(MessageTray);
+
+      if (MessageTray._bannerBin && PanelBox.visible) {
+        if (
+          PanelBox.translation_y <
+          Main.layoutManager.primaryMonitor.height / 2
+        ) {
+          // If panel is in the top half, push notifications down by the panel's visual bottom
+          MessageTray._bannerBin.margin_top =
+            PanelBox.translation_y + PanelBox.height;
+        } else {
+          // If panel is in the bottom half, notifications stay at the very top (0)
+          MessageTray._bannerBin.margin_top = 0;
+        }
+
+        DEBUG(`Adjusted Notification Y to: ${MessageTray._bannerBin.y}`);
+      }
+    };
+  }
+
+  _onToggleShowNotification() {
+    const stateText = PanelBox.visible
+      ? "Action1 (Visible)"
+      : "Action0 (Hidden)";
+    NOTIFY(`Panel state changed to: ${stateText}`);
+    DEBUG(`Panel state changed to: ${stateText}`);
+  }
+
+  _syncVisibility() {
+    PanelBox.visible = this._settings.get_boolean("show-indicator");
+  }
+
+  _syncPanelHeight() {
+    if (
+      PanelBox.visible &&
+      PanelBox.height > 0 &&
+      PanelBox.height !== this._panelHeight
+    ) {
+      this._panelHeight = PanelBox.height;
+    }
+  }
+
+  _onMonitorsChanged() {
+    DEBUG("...MONITORS CHANGED...");
+    this._monitorIndex = Main.layoutManager.primaryIndex;
+    // Safety check: Ensure the index is within the current monitors array
+    if (this._monitorIndex >= Main.layoutManager.monitors.length) {
+      this._monitorIndex = 0; // Fallback to first monitor if index is invalid
+    }
+  }
+
+  _updatePanelPosition(position) {
+    DEBUG("...UPDATING PANEL POSITION...");
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    // Check if monitor exists and ensure panelHeight is a number
+    if (!monitor || typeof this._panelHeight !== "number") {
+      return;
+    }
+    // Ensure the panel height is accounted for so it doesn't push off-screen at 100
+    const maxY = monitor.height - this._panelHeight;
+    const targetY = (maxY * position) / 100;
+    // Move the panel
+    PanelBox.translation_y = targetY;
+  }
+
+  destroy() {
+    this._signalsHandler.destroy();
+
+    if (MessageTray._bannerBin) {
+      MessageTray._bannerBin.margin_top = 0;
+    }
+    MessageTray._updateState = this._originalUpdateState;
+
+    this._monitorIndex = null;
+    // -- Settings are handled by system. So ignored here
+
+    this._settings.set_boolean("show-indicator", true);
+    this._settings.set_int("panel-position", 0);
+    PanelBox.visible = true;
+    PanelBox.translation_y = 0;
+
+    Main.layoutManager.removeChrome(PanelBox);
+    Main.layoutManager.addChrome(PanelBox, {
+      affectsStruts: true,
+      trackFullscreen: true,
     });
 
-    // Set initial color from stored hex
-    const initialRgba = new Gdk.RGBA();
-    initialRgba.parse(settings.get_string("panel-color"));
-    colorButton.set_rgba(initialRgba);
-
-    colorButton.connect("notify::rgba", (btn) => {
-      const c = btn.get_rgba();
-      const r = Math.round(c.red * 255)
-        .toString(16)
-        .padStart(2, "0");
-      const g = Math.round(c.green * 255)
-        .toString(16)
-        .padStart(2, "0");
-      const b = Math.round(c.blue * 255)
-        .toString(16)
-        .padStart(2, "0");
-      settings.set_string("panel-color", `#${r}${g}${b}`);
-    });
-
-    // Keep the button in sync if settings change from outside (e.g. dconf)
-    settings.connect("changed::panel-color", () => {
-      const rgba = new Gdk.RGBA();
-      rgba.parse(settings.get_string("panel-color"));
-      colorButton.set_rgba(rgba);
-    });
-
-    colorRow.add_suffix(colorButton);
-    appearanceGroup.add(colorRow);
-
-    // --- Opacity when no windows overlap (clear) ------------------------------
-
-    const clearRow = new Adw.ActionRow({
-      title: "Opacity when clear",
-      subtitle: "0.0 = fully transparent · 1.0 = fully solid",
-    });
-    const clearSpin = new Gtk.SpinButton({
-      adjustment: new Gtk.Adjustment({
-        lower: 0.0,
-        upper: 1.0,
-        step_increment: 0.05,
-      }),
-      digits: 2,
-      valign: Gtk.Align.CENTER,
-    });
-    settings.bind(
-      "panel-opacity-clear",
-      clearSpin,
-      "value",
-      Gio.SettingsBindFlags.DEFAULT,
-    );
-    clearRow.add_suffix(clearSpin);
-    appearanceGroup.add(clearRow);
-
-    // --- Opacity when a window overlaps ---------------------------------------
-
-    const overlapRow = new Adw.ActionRow({
-      title: "Opacity when overlapped",
-      subtitle: "Applied when a window is behind the panel",
-    });
-    const overlapSpin = new Gtk.SpinButton({
-      adjustment: new Gtk.Adjustment({
-        lower: 0.0,
-        upper: 1.0,
-        step_increment: 0.05,
-      }),
-      digits: 2,
-      valign: Gtk.Align.CENTER,
-    });
-    settings.bind(
-      "panel-opacity-overlap",
-      overlapSpin,
-      "value",
-      Gio.SettingsBindFlags.DEFAULT,
-    );
-    overlapRow.add_suffix(overlapSpin);
-    appearanceGroup.add(overlapRow);
-
-    // -------------------------------------------------------------------------
-    // Assemble page
-    // -------------------------------------------------------------------------
-
-    const page = new Adw.PreferencesPage();
-    page.add(behaviorGroup);
-    page.add(appearanceGroup);
-    window.add(page);
->>>>>>> origin/main
+    DEBUG("---ZEN TOP BAR DESTROYED---");
   }
 }
