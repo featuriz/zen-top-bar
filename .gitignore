@@ -18,3 +18,7 @@ Thumbs.db
 
 # Local configuration
 .env
+<<<<<<< HEAD
+=======
+ref/
+>>>>>>> origin/main

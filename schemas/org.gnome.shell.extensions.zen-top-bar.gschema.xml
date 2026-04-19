@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.zen-top-bar" path="/org/gnome/shell/extensions/zen-top-bar/">
+<<<<<<< HEAD
     <key name="show-indicator" type="b">
       <default>true</default>
       <summary>Enable auto-hide</summary>
@@ -14,5 +15,36 @@
         Position of the panel as a percentage of screen height (0 = top, 100 = bottom).
       </description>
     </key>
+=======
+
+    <!-- Behavior -->
+
+    <key name="animation-time" type="d">
+      <default>0.2</default>
+      <summary>Animation duration</summary>
+      <description>Time in seconds for panel show/hide animations.</description>
+    </key>
+
+    <!-- Appearance -->
+
+    <key name="panel-color" type="s">
+      <default>'#000000'</default>
+      <summary>Panel background color</summary>
+      <description>Hex color string (#rrggbb) applied to the panel background.</description>
+    </key>
+
+    <key name="panel-opacity-clear" type="d">
+      <default>0.0</default>
+      <summary>Panel opacity when clear</summary>
+      <description>Panel opacity (0.0–1.0) when no window overlaps the panel area.</description>
+    </key>
+
+    <key name="panel-opacity-overlap" type="d">
+      <default>0.85</default>
+      <summary>Panel opacity when overlapped</summary>
+      <description>Panel opacity (0.0–1.0) when a window is behind the panel area.</description>
+    </key>
+
+>>>>>>> origin/main
   </schema>
 </schemalist>
