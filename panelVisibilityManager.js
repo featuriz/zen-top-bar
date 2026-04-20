@@ -1,5 +1,15 @@
+// --
+// 0. INIT
+// 1. Panel show and hide by settings
+// 2. Panel position by settings
+// 3. Monitors
+// 4. Fix Notification problem
+// 5. PANEL VISIBLE - based on window position
+//
+// --
 import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
+import Meta from "gi://Meta";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
@@ -9,6 +19,9 @@ import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
 const MessageTray = Main.messageTray;
 const PanelBox = Main.layoutManager.panelBox;
 
+// Debounce for position/size-changed signals during window drag/resize.
+const CHECK_DEBOUNCE_MS = 100;
+
 export class PanelVisibilityManager {
   constructor(settings, monitorIndex) {
     this._settings = settings;
@@ -17,10 +30,15 @@ export class PanelVisibilityManager {
     this._signalsHandler = new GlobalSignalsHandler();
     this._originalUpdateState = MessageTray._updateState;
 
+    // 5. Focused window tracking
+    this._focusWin = null;
+    this._checkDebounceId = 0;
+
     // Defer setup to ensure shell is fully ready
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._setup();
       this._fixNotification();
+      this._trackFocusWindow();
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -28,12 +46,14 @@ export class PanelVisibilityManager {
   _setup() {
     DEBUG("---ZEN TOP BAR INITIALIZED---");
 
-    // When ready update panel height
-    this._signalsHandler.add(PanelBox, "notify::allocation", () => {
-      this._syncPanelHeight();
-    });
+    // 0. When ready update panel height
+    for (const pbs of ["notify::allocation", "notify::height"]) {
+      this._signalsHandler.add(PanelBox, pbs, () => {
+        this._syncPanelHeight();
+      });
+    }
 
-    // Sync visibility from settings
+    // 1. Sync visibility from settings
     this._signalsHandler.add(
       this._settings,
       "changed::show-indicator",
@@ -44,7 +64,7 @@ export class PanelVisibilityManager {
       },
     );
 
-    // Update panel position from settings
+    // 2. Update panel position from settings
     this._signalsHandler.add(
       this._settings,
       "changed::panel-position",
@@ -53,10 +73,16 @@ export class PanelVisibilityManager {
       },
     );
 
-    // Monitor changed - TODOS
+    // 3. Monitor changed - TODOS
     this._signalsHandler.add(Main.layoutManager, "monitors-changed", () => {
-      this._onMonitorsChanged.bind(this);
+      this._onMonitorsChanged();
       this._syncPanelHeight();
+      this._trackFocusWindow();
+    });
+
+    // 5. Focus changed
+    this._signalsHandler.add(global.display, "notify::focus-window", () => {
+      this._trackFocusWindow();
     });
 
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
@@ -66,32 +92,12 @@ export class PanelVisibilityManager {
     });
   }
 
-  // FIX NOTIFICATION - monkey patch
-  _fixNotification() {
-    DEBUG("--- APPLYING NOTIFICATION FIX ---");
-
-    MessageTray._updateState = () => {
-      // Execute original logic first to let the shell decide show/hide status
-      this._originalUpdateState.call(MessageTray);
-
-      if (MessageTray._bannerBin && PanelBox.visible) {
-        if (
-          PanelBox.translation_y <
-          Main.layoutManager.primaryMonitor.height / 2
-        ) {
-          // If panel is in the top half, push notifications down by the panel's visual bottom
-          MessageTray._bannerBin.margin_top =
-            PanelBox.translation_y + PanelBox.height;
-        } else {
-          // If panel is in the bottom half, notifications stay at the very top (0)
-          MessageTray._bannerBin.margin_top = 0;
-        }
-
-        DEBUG(`Adjusted Notification Y to: ${MessageTray._bannerBin.y}`);
-      }
-    };
+  // 1. Sync visibility
+  _syncVisibility() {
+    PanelBox.visible = this._settings.get_boolean("show-indicator");
   }
 
+  // 1. Toggle show notification
   _onToggleShowNotification() {
     const stateText = PanelBox.visible
       ? "Action1 (Visible)"
@@ -100,29 +106,7 @@ export class PanelVisibilityManager {
     DEBUG(`Panel state changed to: ${stateText}`);
   }
 
-  _syncVisibility() {
-    PanelBox.visible = this._settings.get_boolean("show-indicator");
-  }
-
-  _syncPanelHeight() {
-    if (
-      PanelBox.visible &&
-      PanelBox.height > 0 &&
-      PanelBox.height !== this._panelHeight
-    ) {
-      this._panelHeight = PanelBox.height;
-    }
-  }
-
-  _onMonitorsChanged() {
-    DEBUG("...MONITORS CHANGED...");
-    this._monitorIndex = Main.layoutManager.primaryIndex;
-    // Safety check: Ensure the index is within the current monitors array
-    if (this._monitorIndex >= Main.layoutManager.monitors.length) {
-      this._monitorIndex = 0; // Fallback to first monitor if index is invalid
-    }
-  }
-
+  // 2. Update panel position
   _updatePanelPosition(position) {
     DEBUG("...UPDATING PANEL POSITION...");
     const monitor = Main.layoutManager.monitors[this._monitorIndex];
@@ -133,11 +117,151 @@ export class PanelVisibilityManager {
     // Ensure the panel height is accounted for so it doesn't push off-screen at 100
     const maxY = monitor.height - this._panelHeight;
     const targetY = (maxY * position) / 100;
-    // Move the panel
-    // PanelBox.translation_y = targetY;
+    if (PanelBox.translation_y >= 0) {
+      this._transition(targetY);
+    }
+  }
+
+  // 3. Monitor changed
+  _onMonitorsChanged() {
+    DEBUG("...MONITORS CHANGED...");
+    this._monitorIndex = Main.layoutManager.primaryIndex;
+    // Safety check: Ensure the index is within the current monitors array
+    if (this._monitorIndex >= Main.layoutManager.monitors.length) {
+      this._monitorIndex = 0; // Fallback to first monitor if index is invalid
+    }
+  }
+
+  // 4. FIX NOTIFICATION - monkey patch
+  _fixNotification() {
+    DEBUG("--- APPLYING NOTIFICATION FIX ---");
+    MessageTray._updateState = () => {
+      this._originalUpdateState.call(MessageTray);
+
+      if (MessageTray._bannerBin && PanelBox.visible) {
+        // Adjust notifications so they don't overlap the floating panel
+        const isTopHalf =
+          PanelBox.translation_y < Main.layoutManager.primaryMonitor.height / 2;
+        MessageTray._bannerBin.margin_top = isTopHalf
+          ? Math.max(0, PanelBox.translation_y + PanelBox.height)
+          : 0;
+      }
+      DEBUG(`Adjusted Notification Y to: ${MessageTray._bannerBin.y}`);
+    };
+  }
+
+  // 5. Track Focus Window
+  _trackFocusWindow() {
+    DEBUG("...TRACK FOCUS WINDOW...");
+    // Disconnect signals from previous focused window
+    if (this._focusWin) {
+      this._signalsHandler.remove_by_obj(this._focusWin);
+    }
+    this._focusWin = global.display.focus_window;
+    if (!this._focusWin) {
+      this._syncPanel(true);
+      return;
+    }
+
+    const checkWinBound = this._scheduleCheck.bind(this);
+
+    ["position-changed", "size-changed"].forEach((sig) => {
+      this._signalsHandler.add(this._focusWin, sig, checkWinBound);
+    });
+    this._signalsHandler.add(this._focusWin, "unmanaged", () => {
+      this._signalsHandler.remove_by_obj(this._focusWin);
+      this._focusWin = null;
+      this._syncPanel(true);
+    });
+    // Manually run it once to sync the state immediately upon focus
+    this._scheduleCheck();
+  }
+
+  // 5.1
+  _checkWin() {
+    DEBUG("...CHECK...");
+    if (!this._focusWin || this._focusWin.is_destroyed?.()) {
+      this._syncPanel(true);
+      return;
+    }
+    const rect = this._focusWin.get_frame_rect();
+    const isFS = this._focusWin.fullscreen || this._focusWin.is_fullscreen();
+    const isMax =
+      this._focusWin.maximized_vertically &&
+      this._focusWin.maximized_horizontally;
+    const isNearTop = rect.y < this._panelHeight;
+
+    if (isFS || isMax || isNearTop) {
+      DEBUG("HIDE");
+      this._syncPanel(false);
+    } else {
+      DEBUG("SHOW");
+      this._syncPanel(true);
+    }
+    DEBUG(
+      `Fullscreen: ${isFS}, Is Maximized: ${isMax}, Y: ${rect.y}, Panel Height: ${this._panelHeight}`,
+    );
+  }
+
+  // -- Helpers  --
+  // 5.1.1
+  _syncPanel(show) {
+    let targetY;
+
+    if (show) {
+      // Calculate the actual "Show" target based on your settings
+      const position = this._settings.get_int("panel-position");
+      const monitor = Main.layoutManager.monitors[this._monitorIndex];
+      if (!monitor || typeof this._panelHeight !== "number") {
+        return;
+      }
+      const maxY = monitor.height - this._panelHeight;
+      targetY = (maxY * position) / 100;
+    } else {
+      const isTopHalf =
+        PanelBox.translation_y < Main.layoutManager.primaryMonitor.height / 2;
+      targetY = isTopHalf
+        ? -this._panelHeight
+        : Main.layoutManager.primaryMonitor.height;
+    }
+    // Now the guard works perfectly regardless of the slider position
+    if (Math.abs(PanelBox.translation_y - targetY) < 0.1) return;
+
+    DEBUG(show ? `>>> SHOWING at ${targetY}` : `<<< HIDING at ${targetY}`);
     this._transition(targetY);
   }
 
+  // Sync panel height
+  _syncPanelHeight() {
+    if (
+      PanelBox.visible &&
+      PanelBox.height > 0 &&
+      PanelBox.height !== this._panelHeight
+    ) {
+      this._panelHeight = PanelBox.height;
+    }
+  }
+
+  // DELAYED CHECK
+  _scheduleCheck() {
+    // // -DEBUG("...SCHEDULE CHECK...");
+    if (this._checkDebounceId) {
+      GLib.source_remove(this._checkDebounceId);
+      this._checkDebounceId = 0;
+    }
+    this._checkDebounceId = GLib.timeout_add(
+      GLib.PRIORITY_DEFAULT,
+      CHECK_DEBOUNCE_MS,
+      () => {
+        // DEBUG("...SCHEDULE CHECK: INNER BLOCK...");
+        this._checkWin(); // 5.1
+        this._checkDebounceId = 0;
+        return GLib.SOURCE_REMOVE;
+      },
+    );
+  }
+
+  // Animate panel
   async _transition(targetY) {
     try {
       PanelBox.remove_all_transitions();
@@ -152,6 +276,11 @@ export class PanelVisibilityManager {
   }
 
   destroy() {
+    if (this._checkDebounceId) {
+      GLib.source_remove(this._checkDebounceId);
+      this._checkDebounceId = 0;
+    }
+
     this._signalsHandler.destroy();
 
     if (MessageTray._bannerBin) {
@@ -160,6 +289,7 @@ export class PanelVisibilityManager {
     MessageTray._updateState = this._originalUpdateState;
 
     this._monitorIndex = null;
+    this._focusWin = null;
     // -- Settings are handled by system. So ignored here
 
     this._settings.set_boolean("show-indicator", true);

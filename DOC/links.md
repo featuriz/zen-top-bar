@@ -79,4 +79,17 @@ Since you want a list of constants and methods for `PanelBox`, here is the "Deve
 | `reactive`      | `Boolean`        | If `false`, mouse clicks pass through the panel to windows behind it.                            |
 | `translation_y` | `Number`         | An offset from `y`. Great for "slide-up" animations without changing the actual layout position. |
 
------------x-------
+---
+
+Reference:
+
+1. https://gjs.guide/extensions/
+2. https://gjs.guide/extensions/upgrading/gnome-shell-50.html
+3. https://gnome.pages.gitlab.gnome.org/libadwaita/doc/1-latest/widget-gallery.html
+4. https://gjs-docs.gnome.org/st17~17/st.boxlayout
+5. https://gjs-docs.gnome.org/clutter17~17/clutter.actor
+6. https://gjs-docs.gnome.org/shell17~17/
+
+IMPORTANT: GNOME50 ONLY
+
+---

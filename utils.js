@@ -1,6 +1,8 @@
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-export const DEBUG = (msg) => console.log(`[ZenTopBar] ${msg}`);
+export const DEBUG = (msg) => {
+  if (true) console.log(`[ZenTopBar] ${msg}`);
+};
 
 export class GlobalSignalsHandler {
   constructor() {
@@ -13,9 +15,25 @@ export class GlobalSignalsHandler {
     return id;
   }
 
+  remove_by_obj(object) {
+    this._signals = this._signals.filter((sig) => {
+      if (sig.object === object) {
+        try {
+          sig.object.disconnect(sig.id);
+        } catch (e) {
+          // Object might already be destroyed/garbage collected
+        }
+        return false; // Remove from array
+      }
+      return true; // Keep in array
+    });
+  }
+
   destroy() {
     for (let signal of this._signals) {
-      signal.object.disconnect(signal.id);
+      try {
+        signal.object.disconnect(signal.id);
+      } catch (e) {}
     }
     this._signals = [];
   }
