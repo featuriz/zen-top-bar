@@ -5,7 +5,7 @@
 // 3. Monitors
 // 4. Fix Notification problem
 // 5. PANEL VISIBLE - based on window position
-// 6. Barrier
+// 6. Pressure Barrier
 //
 // --
 import Clutter from "gi://Clutter";
@@ -15,6 +15,7 @@ import Shell from "gi://Shell";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as Layout from "resource:///org/gnome/shell/ui/layout.js";
+import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";
 import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
 
 import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
@@ -22,11 +23,20 @@ import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
 const MessageTray = Main.messageTray;
 const PanelBox = Main.layoutManager.panelBox;
 
-// Debounce for position/size-changed signals during window drag/resize.
-const CHECK_DEBOUNCE_MS = 100;
-
-const PRESSURE_THRESHOLD = 1;
+// Mouse must push this many px against the top edge to trigger show.
+// Prevents accidental shows from a cursor moving across the top of screen.
+const PRESSURE_THRESHOLD = 50;
+// Pressure accumulation resets if mouse leaves the edge for this long (ms).
 const PRESSURE_TIMEOUT_MS = 1000;
+// Delay before hiding after mouse leaves panel area (ms).
+// Prevents flicker if mouse briefly leaves and re-enters.
+const HIDE_DEBOUNCE_MS = 700;
+// Mouse must go this many px below panel bottom edge to be considered "left".
+const HIDE_MARGIN_PX = 10;
+// Debounce for position/size-changed signals during window drag/resize.
+const CHECK_DEBOUNCE_MS = 50;
+
+let _originalMessageTrayUpdateState = null;
 
 export class PanelVisibilityManager {
   constructor(settings, monitorIndex) {
@@ -34,7 +44,6 @@ export class PanelVisibilityManager {
     this._monitorIndex = monitorIndex;
     this._panelHeight = PanelBox.height || 30;
     this._signalsHandler = new GlobalSignalsHandler();
-    this._originalUpdateState = MessageTray._updateState;
 
     // 5. Focused window tracking
     this._focusWin = null;
@@ -43,13 +52,17 @@ export class PanelVisibilityManager {
     // 6. Pressure Barrier
     this._metaBarrier = null;
     this._pressureBarrier = null;
+    this._userForced = false;
+    this._pointerListener = null;
+    this._hideDebounceId = 0;
+    this._checkDebounceId = 0;
 
     // Defer setup to ensure shell is fully ready
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._setup();
       this._fixNotification();
       this._trackFocusWindow();
-      this._setupPressureBarrier(); // 6. Testing
+      this._teardownPressureBarrier();
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -70,7 +83,7 @@ export class PanelVisibilityManager {
       "changed::show-indicator",
       (settings, key) => {
         DEBUG(`${key} = ${settings.get_value(key).print(true)}`);
-        this._syncVisibility();
+        PanelBox.visible = this._settings.get_boolean("show-indicator");
         this._onToggleShowNotification();
       },
     );
@@ -101,11 +114,6 @@ export class PanelVisibilityManager {
       affectsStruts: false, // Panel doesn't affect struts
       trackFullscreen: true, // Panel doesn't track fullscreen
     });
-  }
-
-  // 1. Sync visibility
-  _syncVisibility() {
-    PanelBox.visible = this._settings.get_boolean("show-indicator");
   }
 
   // 1. Toggle show notification
@@ -146,8 +154,12 @@ export class PanelVisibilityManager {
   // 4. FIX NOTIFICATION - monkey patch
   _fixNotification() {
     DEBUG("--- APPLYING NOTIFICATION FIX ---");
+    if (!_originalMessageTrayUpdateState) {
+      _originalMessageTrayUpdateState = MessageTray._updateState;
+    }
+
     MessageTray._updateState = () => {
-      this._originalUpdateState.call(MessageTray);
+      _originalMessageTrayUpdateState.call(MessageTray);
 
       if (MessageTray._bannerBin && PanelBox.visible) {
         // Adjust notifications so they don't overlap the floating panel
@@ -191,7 +203,12 @@ export class PanelVisibilityManager {
   // 5.1
   _checkWin() {
     DEBUG("...CHECK...");
-    if (!this._focusWin || this._focusWin.is_destroyed?.()) {
+    if (
+      !this._focusWin ||
+      this._focusWin.get_monitor() !== this._monitorIndex ||
+      this._focusWin.is_destroyed?.()
+    ) {
+      this._userForced = false;
       this._syncPanel(true);
       return;
     }
@@ -203,11 +220,19 @@ export class PanelVisibilityManager {
     const isNearTop = rect.y < this._panelHeight;
 
     if (isFS || isMax || isNearTop) {
+      if (this._userForced) {
+        DEBUG("HIDE BLOCKED BY USER FORCED");
+        return;
+      }
       DEBUG("HIDE");
       this._syncPanel(false);
+      this._setupPressureBarrier();
     } else {
       DEBUG("SHOW");
+      this._userForced = false;
+      this._stopPointerWatch();
       this._syncPanel(true);
+      this._teardownPressureBarrier();
     }
     DEBUG(
       `Fullscreen: ${isFS}, Is Maximized: ${isMax}, Y: ${rect.y}, Panel Height: ${this._panelHeight}`,
@@ -258,7 +283,87 @@ export class PanelVisibilityManager {
   // 6.1
   _onBarrierHit() {
     DEBUG("Barrier hit!");
+    this._userForced = true;
+    this._teardownPressureBarrier();
+    this._syncPanel(true);
+    this._startPointerWatch();
   }
+
+  // 6.2
+  // -- POINTER WATCH --
+  _startPointerWatch() {
+    DEBUG("...START POINTER WATCH...");
+    if (this._pointerListener) return;
+    this._pointerListener = PointerWatcher.getPointerWatcher().addWatch(
+      100,
+      (_x, y) => this._onPointerMove(y),
+    );
+  }
+  _stopPointerWatch() {
+    DEBUG("...STOP POINTER WATCH...");
+    if (this._pointerListener) {
+      PointerWatcher.getPointerWatcher()._removeWatch(this._pointerListener);
+      this._pointerListener = null;
+    }
+    this._clearHideDebounce();
+  }
+  _onPointerMove(y) {
+    // // -DEBUG("...ON POINTER MOVE...");
+    // Safety guard: panel was hidden by some other path; stop watching.
+    if (!PanelBox.visible) {
+      this._stopPointerWatch();
+      return;
+    }
+
+    // Menu is open → panel must stay visible, cancel any pending hide.
+    if (Main.panel.menuManager.activeMenu) {
+      this._clearHideDebounce();
+      return;
+    }
+
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    const relativeY = y - monitor.y; // Normalize Y to the monitor's top edge
+
+    if (relativeY < this._panelHeight + HIDE_MARGIN_PX) {
+      // Mouse is in or near the panel area — cancel pending hide.
+      this._clearHideDebounce();
+    } else {
+      // Mouse has left the panel area — schedule a hide.
+      this._startHideDebounce();
+    }
+  }
+  _startHideDebounce() {
+    // // -DEBUG("...START HIDE DEBOUNCE...");
+    if (this._hideDebounceId) return; // already scheduled
+    this._hideDebounceId = GLib.timeout_add(
+      GLib.PRIORITY_DEFAULT,
+      HIDE_DEBOUNCE_MS,
+      () => {
+        // DEBUG("...HIDE DEBOUNCE: INNER BLOCK...");
+        this._hideDebounceId = 0;
+        const monitor = Main.layoutManager.monitors[this._monitorIndex];
+        // Re-confirm: mouse is still outside and no menu is open.
+        const [, , y] = global.get_pointer();
+        const relativeY = y - monitor.y;
+        if (
+          relativeY >= this._panelHeight + HIDE_MARGIN_PX &&
+          !Main.panel.menuManager.activeMenu
+        ) {
+          this._userForced = false;
+          this._syncPanel(false);
+        }
+        return GLib.SOURCE_REMOVE;
+      },
+    );
+  }
+  _clearHideDebounce() {
+    // // -DEBUG("...CLEAR HIDE DEBOUNCE...");
+    if (this._hideDebounceId) {
+      GLib.source_remove(this._hideDebounceId);
+      this._hideDebounceId = 0;
+    }
+  }
+  // -- POINTER WATCH END --
 
   // -- Helpers  --
   // 5.1.1
@@ -340,11 +445,17 @@ export class PanelVisibilityManager {
 
     this._teardownPressureBarrier();
     this._signalsHandler.destroy();
+    this._userForced = false;
 
     if (MessageTray._bannerBin) {
       MessageTray._bannerBin.margin_top = 0;
     }
-    MessageTray._updateState = this._originalUpdateState;
+
+    if (_originalMessageTrayUpdateState) {
+      MessageTray._updateState = _originalMessageTrayUpdateState;
+      // Optionally reset the tracker so it can be re-patched cleanly
+      _originalMessageTrayUpdateState = null;
+    }
 
     this._monitorIndex = null;
     this._focusWin = null;
@@ -360,6 +471,7 @@ export class PanelVisibilityManager {
       affectsStruts: true,
       trackFullscreen: true,
     });
+    Main.layoutManager._queueUpdateRegions();
 
     DEBUG("---ZEN TOP BAR DESTROYED---");
   }
