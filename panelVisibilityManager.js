@@ -5,13 +5,16 @@
 // 3. Monitors
 // 4. Fix Notification problem
 // 5. PANEL VISIBLE - based on window position
+// 6. Barrier
 //
 // --
 import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
+import Shell from "gi://Shell";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import * as Layout from "resource:///org/gnome/shell/ui/layout.js";
 import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
 
 import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
@@ -21,6 +24,9 @@ const PanelBox = Main.layoutManager.panelBox;
 
 // Debounce for position/size-changed signals during window drag/resize.
 const CHECK_DEBOUNCE_MS = 100;
+
+const PRESSURE_THRESHOLD = 1;
+const PRESSURE_TIMEOUT_MS = 1000;
 
 export class PanelVisibilityManager {
   constructor(settings, monitorIndex) {
@@ -34,11 +40,16 @@ export class PanelVisibilityManager {
     this._focusWin = null;
     this._checkDebounceId = 0;
 
+    // 6. Pressure Barrier
+    this._metaBarrier = null;
+    this._pressureBarrier = null;
+
     // Defer setup to ensure shell is fully ready
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
       this._setup();
       this._fixNotification();
       this._trackFocusWindow();
+      this._setupPressureBarrier(); // 6. Testing
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -203,6 +214,52 @@ export class PanelVisibilityManager {
     );
   }
 
+  // 6. Pressure Barrier
+  _setupPressureBarrier() {
+    DEBUG("...SETUP BARRIERS...");
+    this._teardownPressureBarrier();
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    if (!monitor) return;
+    this._metaBarrier = new Meta.Barrier({
+      backend: global.backend,
+      x1: monitor.x,
+      x2: monitor.x + monitor.width - 1,
+      y1: monitor.y + 1,
+      y2: monitor.y + 1,
+      directions:
+        Meta.BarrierDirection.POSITIVE_Y | Meta.BarrierDirection.NEGATIVE_Y,
+    });
+    this._pressureBarrier = new Layout.PressureBarrier(
+      PRESSURE_THRESHOLD,
+      Shell.PressureBarrierTimeout,
+      Shell.ActionMode.NORMAL,
+    );
+    this._pressureBarrier.addBarrier(this._metaBarrier);
+    this._pressureBarrier.connect("trigger", () => {
+      this._onBarrierHit();
+    });
+  }
+
+  // 6.x
+  _teardownPressureBarrier() {
+    DEBUG("...CLEAR BARRIERS...");
+    if (this._metaBarrier) {
+      if (this._pressureBarrier)
+        this._pressureBarrier.removeBarrier(this._metaBarrier);
+      this._metaBarrier.destroy();
+      this._metaBarrier = null;
+    }
+    if (this._pressureBarrier) {
+      this._pressureBarrier.destroy();
+      this._pressureBarrier = null;
+    }
+  }
+
+  // 6.1
+  _onBarrierHit() {
+    DEBUG("Barrier hit!");
+  }
+
   // -- Helpers  --
   // 5.1.1
   _syncPanel(show) {
@@ -281,6 +338,7 @@ export class PanelVisibilityManager {
       this._checkDebounceId = 0;
     }
 
+    this._teardownPressureBarrier();
     this._signalsHandler.destroy();
 
     if (MessageTray._bannerBin) {
