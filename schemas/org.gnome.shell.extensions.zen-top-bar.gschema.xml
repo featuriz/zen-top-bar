@@ -14,5 +14,42 @@
         Position of the panel as a percentage of screen height (0 = top, 100 = bottom).
       </description>
     </key>
+    <key name="pressure-threshold" type="i">
+      <range min="1" max="1000"/>
+      <default>1</default>
+      <summary>Pressure threshold</summary>
+      <description>
+        Mouse must push this many px against the top edge to trigger show. \n
+        Prevents accidental shows from a cursor moving across the top of screen.
+      </description>
+    </key>
+    <key name="hide-debounce-time" type="i">
+      <range min="100" max="2000"/>
+      <default>500</default>
+      <summary>Hide delay duration</summary>
+      <description>
+        The delay in milliseconds before the panel hides after the cursor leaves.
+        Prevents the panel from flickering or hiding during accidental mouse movements.
+      </description>
+    </key>
+    <key name="hide-margin-px" type="i">
+      <range min="0" max="500"/>
+      <default>10</default>
+      <summary>Hide margin distance</summary>
+      <description>
+        The distance in pixels the cursor must move away from the panel before 
+        the hide timer starts. A larger margin prevents the panel from hiding 
+        if the cursor slightly overshoots the edge.
+      </description>
+    </key>
+    <key name="check-debounce-ms" type="i">
+      <range min="10" max="500"/>
+      <default>50</default>
+      <summary>Detection interval</summary>
+      <description>
+        The frequency in milliseconds at which the extension checks for cursor position 
+        or pressure events. Lower values are more responsive but use more CPU.
+      </description>
+    </key>
   </schema>
 </schemalist>

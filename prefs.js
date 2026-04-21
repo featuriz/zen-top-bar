@@ -15,24 +15,29 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     });
     window.add(page);
 
-    const group = new Adw.PreferencesGroup({
+    const appearanceGroup = new Adw.PreferencesGroup({
       title: _("Appearance"),
       description: _("Configure the appearance of the extension"),
     });
-    page.add(group);
+    const settingsGroup = new Adw.PreferencesGroup({
+      title: _("Settings"),
+      description: _("Configure the behavior of the extension"),
+    });
+    page.add(appearanceGroup);
+    page.add(settingsGroup);
 
+    // -- Appearance --
     // Visibility
-    const row = new Adw.SwitchRow({
+    const visibilityRow = new Adw.SwitchRow({
       title: _("Visibility"),
       subtitle: _("Whether to show the panel (topbar)"),
     });
-    group.add(row);
 
     // Panel Position
     const panelPositionRow = new Adw.SpinRow({
       title: _("Panel Position"),
       subtitle: _(
-        "0 = top, 100 = bottom. Based on screen height. For testing only.",
+        "0 = top, 100 = bottom.\n Based on screen height. For testing only.",
       ),
       adjustment: new Gtk.Adjustment({
         lower: 0,
@@ -41,13 +46,67 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
       }),
       snap_to_ticks: true,
     });
-    group.add(panelPositionRow);
+    appearanceGroup.add(visibilityRow);
+    appearanceGroup.add(panelPositionRow);
+
+    // -- Settings --
+    // Pressure threshold
+    const pressureThresholdRow = new Adw.SpinRow({
+      title: _("Pressure Threshold"),
+      subtitle: _("Higher values require a harder 'push' to show the panel"),
+      adjustment: new Gtk.Adjustment({
+        lower: 1,
+        upper: 1000,
+        step_increment: 10,
+      }),
+      snap_to_ticks: true,
+    });
+    // Hide Debounca Time (ms)
+    const hideDebounceRow = new Adw.SpinRow({
+      title: _("Hide Delay (ms)"),
+      subtitle: _("How long the panel stays visible after the cursor leaves"),
+      adjustment: new Gtk.Adjustment({
+        lower: 100,
+        upper: 2000,
+        step_increment: 50,
+      }),
+      snap_to_ticks: true,
+    });
+    // Hide Margin (px)
+    const hideMarginRow = new Adw.SpinRow({
+      title: _("Hide Margin (px)"),
+      subtitle: _(
+        "The distance the cursor can move away before the panel hides",
+      ),
+      adjustment: new Gtk.Adjustment({
+        lower: 0,
+        upper: 500,
+        step_increment: 5,
+      }),
+      snap_to_ticks: true,
+    });
+    const checkDebounceRow = new Adw.SpinRow({
+      title: _("Check Interval (ms)"),
+      subtitle: _(
+        "Lower values increase responsiveness; higher values save CPU",
+      ),
+      adjustment: new Gtk.Adjustment({
+        lower: 10,
+        upper: 500,
+        step_increment: 10,
+      }),
+      snap_to_ticks: true,
+    });
+    settingsGroup.add(pressureThresholdRow);
+    settingsGroup.add(hideDebounceRow);
+    settingsGroup.add(hideMarginRow);
+    settingsGroup.add(checkDebounceRow);
 
     // Create a settings object and bind the row to the `show-indicator` key
     const settings = this.getSettings();
     settings.bind(
       "show-indicator",
-      row,
+      visibilityRow,
       "active",
       Gio.SettingsBindFlags.DEFAULT,
     );
@@ -55,6 +114,34 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     settings.bind(
       "panel-position",
       panelPositionRow,
+      "value",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+
+    settings.bind(
+      "pressure-threshold",
+      pressureThresholdRow,
+      "value",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+
+    settings.bind(
+      "hide-debounce-time",
+      hideDebounceRow,
+      "value",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+
+    settings.bind(
+      "hide-margin-px",
+      hideMarginRow,
+      "value",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+
+    settings.bind(
+      "check-debounce-ms",
+      checkDebounceRow,
       "value",
       Gio.SettingsBindFlags.DEFAULT,
     );

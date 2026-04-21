@@ -6,6 +6,7 @@
 // 4. Fix Notification problem
 // 5. PANEL VISIBLE - based on window position
 // 6. Pressure Barrier
+// 7. Panel Menu - FIX
 //
 // --
 import Clutter from "gi://Clutter";
@@ -22,19 +23,6 @@ import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
 
 const MessageTray = Main.messageTray;
 const PanelBox = Main.layoutManager.panelBox;
-
-// Mouse must push this many px against the top edge to trigger show.
-// Prevents accidental shows from a cursor moving across the top of screen.
-const PRESSURE_THRESHOLD = 50;
-// Pressure accumulation resets if mouse leaves the edge for this long (ms).
-const PRESSURE_TIMEOUT_MS = 1000;
-// Delay before hiding after mouse leaves panel area (ms).
-// Prevents flicker if mouse briefly leaves and re-enters.
-const HIDE_DEBOUNCE_MS = 700;
-// Mouse must go this many px below panel bottom edge to be considered "left".
-const HIDE_MARGIN_PX = 10;
-// Debounce for position/size-changed signals during window drag/resize.
-const CHECK_DEBOUNCE_MS = 50;
 
 let _originalMessageTrayUpdateState = null;
 
@@ -109,6 +97,8 @@ export class PanelVisibilityManager {
       this._trackFocusWindow();
     });
 
+    // -- SETTINGS --
+
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: false, // Panel doesn't affect struts
@@ -136,7 +126,7 @@ export class PanelVisibilityManager {
     // Ensure the panel height is accounted for so it doesn't push off-screen at 100
     const maxY = monitor.height - this._panelHeight;
     const targetY = (maxY * position) / 100;
-    if (PanelBox.translation_y >= 0) {
+    if (PanelBox.y >= 0) {
       this._transition(targetY);
     }
   }
@@ -163,10 +153,12 @@ export class PanelVisibilityManager {
 
       if (MessageTray._bannerBin && PanelBox.visible) {
         // Adjust notifications so they don't overlap the floating panel
-        const isTopHalf =
-          PanelBox.translation_y < Main.layoutManager.primaryMonitor.height / 2;
+        const currentY = PanelBox.y;
+        const monitor = Main.layoutManager.monitors[this._monitorIndex];
+        const isTopHalf = currentY < monitor.height / 2;
+
         MessageTray._bannerBin.margin_top = isTopHalf
-          ? Math.max(0, PanelBox.translation_y + PanelBox.height)
+          ? Math.max(0, currentY + this._panelHeight)
           : 0;
       }
       DEBUG(`Adjusted Notification Y to: ${MessageTray._bannerBin.y}`);
@@ -245,6 +237,9 @@ export class PanelVisibilityManager {
     this._teardownPressureBarrier();
     const monitor = Main.layoutManager.monitors[this._monitorIndex];
     if (!monitor) return;
+    const threshold = this._settings.get_int("pressure-threshold");
+    const effectiveThreshold = Math.max(1, threshold);
+
     this._metaBarrier = new Meta.Barrier({
       backend: global.backend,
       x1: monitor.x,
@@ -255,7 +250,7 @@ export class PanelVisibilityManager {
         Meta.BarrierDirection.POSITIVE_Y | Meta.BarrierDirection.NEGATIVE_Y,
     });
     this._pressureBarrier = new Layout.PressureBarrier(
-      PRESSURE_THRESHOLD,
+      effectiveThreshold,
       Shell.PressureBarrierTimeout,
       Shell.ActionMode.NORMAL,
     );
@@ -283,8 +278,8 @@ export class PanelVisibilityManager {
   // 6.1
   _onBarrierHit() {
     DEBUG("Barrier hit!");
-    this._userForced = true;
     this._teardownPressureBarrier();
+    this._userForced = true;
     this._syncPanel(true);
     this._startPointerWatch();
   }
@@ -308,7 +303,7 @@ export class PanelVisibilityManager {
     this._clearHideDebounce();
   }
   _onPointerMove(y) {
-    // // -DEBUG("...ON POINTER MOVE...");
+    DEBUG("...ON POINTER MOVE...");
     // Safety guard: panel was hidden by some other path; stop watching.
     if (!PanelBox.visible) {
       this._stopPointerWatch();
@@ -320,14 +315,17 @@ export class PanelVisibilityManager {
       this._clearHideDebounce();
       return;
     }
-
+    const HIDE_MARGIN_PX = this._settings.get_int("hide-margin-px");
     const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    if (!monitor) return;
     const relativeY = y - monitor.y; // Normalize Y to the monitor's top edge
 
     if (relativeY < this._panelHeight + HIDE_MARGIN_PX) {
+      DEBUG("--- MOUSE IN PANEL ---");
       // Mouse is in or near the panel area — cancel pending hide.
       this._clearHideDebounce();
     } else {
+      DEBUG("--- MOUSE OUT OF PANEL ---");
       // Mouse has left the panel area — schedule a hide.
       this._startHideDebounce();
     }
@@ -335,23 +333,24 @@ export class PanelVisibilityManager {
   _startHideDebounce() {
     // // -DEBUG("...START HIDE DEBOUNCE...");
     if (this._hideDebounceId) return; // already scheduled
+    const HIDE_DEBOUNCE_MS = this._settings.get_int("hide-debounce-time");
     this._hideDebounceId = GLib.timeout_add(
       GLib.PRIORITY_DEFAULT,
       HIDE_DEBOUNCE_MS,
       () => {
-        // DEBUG("...HIDE DEBOUNCE: INNER BLOCK...");
+        DEBUG("...HIDE DEBOUNCE: INNER BLOCK...");
         this._hideDebounceId = 0;
-        const monitor = Main.layoutManager.monitors[this._monitorIndex];
-        // Re-confirm: mouse is still outside and no menu is open.
-        const [, , y] = global.get_pointer();
-        const relativeY = y - monitor.y;
-        if (
-          relativeY >= this._panelHeight + HIDE_MARGIN_PX &&
-          !Main.panel.menuManager.activeMenu
-        ) {
-          this._userForced = false;
-          this._syncPanel(false);
+        // FINAL RE-CHECK: If user moved back in or a menu opened, ABORT.
+        if (this._isMouseInPanelArea() || Main.panel.menuManager.activeMenu) {
+          DEBUG("--- HIDE ABORTED: Mouse returned or Menu open ---");
+          return GLib.SOURCE_REMOVE;
         }
+
+        DEBUG("--- HIDING PANEL ---");
+        this._userForced = false;
+        this._syncPanel(false);
+        this._stopPointerWatch();
+        this._setupPressureBarrier();
         return GLib.SOURCE_REMOVE;
       },
     );
@@ -368,26 +367,23 @@ export class PanelVisibilityManager {
   // -- Helpers  --
   // 5.1.1
   _syncPanel(show) {
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    if (!monitor) return;
+    const position = this._settings.get_int("panel-position");
     let targetY;
 
     if (show) {
       // Calculate the actual "Show" target based on your settings
-      const position = this._settings.get_int("panel-position");
-      const monitor = Main.layoutManager.monitors[this._monitorIndex];
-      if (!monitor || typeof this._panelHeight !== "number") {
-        return;
-      }
       const maxY = monitor.height - this._panelHeight;
-      targetY = (maxY * position) / 100;
+      targetY = monitor.y + (maxY * position) / 100;
     } else {
-      const isTopHalf =
-        PanelBox.translation_y < Main.layoutManager.primaryMonitor.height / 2;
+      const isTopHalf = PanelBox.y < monitor.y + monitor.height / 2;
       targetY = isTopHalf
-        ? -this._panelHeight
-        : Main.layoutManager.primaryMonitor.height;
+        ? monitor.y - this._panelHeight
+        : monitor.y + monitor.height;
     }
     // Now the guard works perfectly regardless of the slider position
-    if (Math.abs(PanelBox.translation_y - targetY) < 0.1) return;
+    if (Math.abs(PanelBox.y - targetY) < 0.1) return;
 
     DEBUG(show ? `>>> SHOWING at ${targetY}` : `<<< HIDING at ${targetY}`);
     this._transition(targetY);
@@ -411,6 +407,7 @@ export class PanelVisibilityManager {
       GLib.source_remove(this._checkDebounceId);
       this._checkDebounceId = 0;
     }
+    const CHECK_DEBOUNCE_MS = this._settings.get_int("check-debounce-ms");
     this._checkDebounceId = GLib.timeout_add(
       GLib.PRIORITY_DEFAULT,
       CHECK_DEBOUNCE_MS,
@@ -423,12 +420,23 @@ export class PanelVisibilityManager {
     );
   }
 
+  // Check if mouse is in panel area
+  _isMouseInPanelArea() {
+    const HIDE_MARGIN_PX = this._settings.get_int("hide-margin-px");
+    const [, y] = global.get_pointer();
+    const monitor = Main.layoutManager.monitors[this._monitorIndex];
+    if (!monitor) return false;
+
+    const relativeY = y - monitor.y;
+    return relativeY < this._panelHeight + HIDE_MARGIN_PX;
+  }
+
   // Animate panel
   async _transition(targetY) {
     try {
       PanelBox.remove_all_transitions();
       await PanelBox.easeAsync({
-        translation_y: targetY,
+        y: targetY,
         duration: 250,
         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
       });
@@ -437,14 +445,22 @@ export class PanelVisibilityManager {
     }
   }
 
+  // -- SETTINGS --
+  _updatePanelStyle() {
+    const color = this._settings.get_string("panel-color");
+    const opacity = this._settings.get_double("panel-opacity-overlap");
+    Main.panel.set_style(`background-color: ${color}; opacity: ${opacity};`);
+  }
+
   destroy() {
     if (this._checkDebounceId) {
       GLib.source_remove(this._checkDebounceId);
       this._checkDebounceId = 0;
     }
 
-    this._teardownPressureBarrier();
     this._signalsHandler.destroy();
+    this._teardownPressureBarrier();
+    this._stopPointerWatch();
     this._userForced = false;
 
     if (MessageTray._bannerBin) {
@@ -464,7 +480,7 @@ export class PanelVisibilityManager {
     this._settings.set_boolean("show-indicator", true);
     this._settings.set_int("panel-position", 0);
     PanelBox.visible = true;
-    PanelBox.translation_y = 0;
+    PanelBox.y = 0;
 
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
