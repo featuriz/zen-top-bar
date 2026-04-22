@@ -126,7 +126,7 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     );
 
     settings.bind(
-      "hide-debounce-time",
+      "hide-debounce-ms",
       hideDebounceRow,
       "value",
       Gio.SettingsBindFlags.DEFAULT,

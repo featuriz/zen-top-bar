@@ -23,7 +23,7 @@
         Prevents accidental shows from a cursor moving across the top of screen.
       </description>
     </key>
-    <key name="hide-debounce-time" type="i">
+    <key name="hide-debounce-ms" type="i">
       <range min="100" max="2000"/>
       <default>500</default>
       <summary>Hide delay duration</summary>

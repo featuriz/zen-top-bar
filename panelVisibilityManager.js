@@ -333,7 +333,7 @@ export class PanelVisibilityManager {
   _startHideDebounce() {
     // // -DEBUG("...START HIDE DEBOUNCE...");
     if (this._hideDebounceId) return; // already scheduled
-    const HIDE_DEBOUNCE_MS = this._settings.get_int("hide-debounce-time");
+    const HIDE_DEBOUNCE_MS = this._settings.get_int("hide-debounce-ms");
     this._hideDebounceId = GLib.timeout_add(
       GLib.PRIORITY_DEFAULT,
       HIDE_DEBOUNCE_MS,
