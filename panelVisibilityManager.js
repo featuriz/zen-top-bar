@@ -110,6 +110,7 @@ export class PanelVisibilityManager {
       "changed::panel-opacity",
       updateStyles.bind(this),
     );
+    this._updatePanelStyle();
     // -- SETTINGS --
 
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
