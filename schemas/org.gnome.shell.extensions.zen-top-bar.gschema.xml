@@ -14,15 +14,6 @@
         Position of the panel as a percentage of screen height (0 = top, 100 = bottom).
       </description>
     </key>
-    <key name="pressure-threshold" type="i">
-      <range min="1" max="1000"/>
-      <default>1</default>
-      <summary>Pressure threshold</summary>
-      <description>
-        Mouse must push this many px against the top edge to trigger show. \n
-        Prevents accidental shows from a cursor moving across the top of screen.
-      </description>
-    </key>
     <key name="hide-debounce-ms" type="i">
       <range min="100" max="2000"/>
       <default>500</default>

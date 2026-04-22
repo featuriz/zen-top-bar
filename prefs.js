@@ -50,17 +50,6 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     appearanceGroup.add(panelPositionRow);
 
     // -- Settings --
-    // Pressure threshold
-    const pressureThresholdRow = new Adw.SpinRow({
-      title: _("Pressure Threshold"),
-      subtitle: _("Higher values require a harder 'push' to show the panel"),
-      adjustment: new Gtk.Adjustment({
-        lower: 1,
-        upper: 1000,
-        step_increment: 10,
-      }),
-      snap_to_ticks: true,
-    });
     // Hide Debounca Time (ms)
     const hideDebounceRow = new Adw.SpinRow({
       title: _("Hide Delay (ms)"),
@@ -97,7 +86,6 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
       }),
       snap_to_ticks: true,
     });
-    settingsGroup.add(pressureThresholdRow);
     settingsGroup.add(hideDebounceRow);
     settingsGroup.add(hideMarginRow);
     settingsGroup.add(checkDebounceRow);
@@ -114,13 +102,6 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     settings.bind(
       "panel-position",
       panelPositionRow,
-      "value",
-      Gio.SettingsBindFlags.DEFAULT,
-    );
-
-    settings.bind(
-      "pressure-threshold",
-      pressureThresholdRow,
       "value",
       Gio.SettingsBindFlags.DEFAULT,
     );
