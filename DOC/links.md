@@ -81,6 +81,12 @@ Since you want a list of constants and methods for `PanelBox`, here is the "Deve
 
 ---
 
+## BUGS
+
+- https://gitlab.gnome.org/tuxor1337/hidetopbar/-/issues/423
+
+---
+
 Reference:
 
 1. https://gjs.guide/extensions/
