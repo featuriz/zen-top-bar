@@ -24,11 +24,17 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 export default class ZenTopBarExtension extends Extension {
   constructor(metadata) {
     super(metadata);
+    this.enableUnredirect = null;
     DEBUG(`Constructing ${this.uuid}`);
   }
 
   enable() {
     DEBUG(`Enabling ${this.uuid}`);
+    if (this.enableUnredirect == null) {
+      this.enableUnredirect = global.compositor.enable_unredirect;
+      global.compositor.enable_unredirect = function () {};
+      global.compositor.disable_unredirect();
+    }
     this._pvManager = new PanelVisibilityManager(
       this.getSettings(),
       Main.layoutManager.primaryIndex,
@@ -37,6 +43,9 @@ export default class ZenTopBarExtension extends Extension {
 
   disable() {
     DEBUG(`Disabling ${this.uuid}`);
+    if (this.enableUnredirect != null) {
+      global.compositor.enable_unredirect = this.enableUnredirect;
+    }
     this._pvManager.destroy();
     this._pvManager = null;
   }

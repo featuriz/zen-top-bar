@@ -84,6 +84,7 @@ Since you want a list of constants and methods for `PanelBox`, here is the "Deve
 ## BUGS
 
 - https://gitlab.gnome.org/tuxor1337/hidetopbar/-/issues/423
+- Solution : https://github.com/Exeos/disable-unredirect/blob/master/src/extension.js
 
 ---
 
