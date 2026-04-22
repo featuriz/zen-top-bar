@@ -53,6 +53,13 @@
         Time in milliseconds for panel show/hide slide animations.
       </description>
     </key>
+    <key name="panel-color" type="s">
+      <default>'#000000'</default>
+      <summary>Panel background color</summary>
+      <description>
+        The background color of the panel.
+      </description>
+    </key>
 
   </schema>
 </schemalist>

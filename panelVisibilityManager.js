@@ -7,6 +7,7 @@
 // 5. PANEL VISIBLE - based on window position
 // 6. Pressure Barrier
 // 7. Panel Menu - FIX
+// 8. Visuals
 //
 // --
 import Clutter from "gi://Clutter";
@@ -50,6 +51,7 @@ export class PanelVisibilityManager {
       this._fixNotification();
       this._trackFocusWindow();
       this._teardownPressureBarrier();
+      this._updatePanelStyle();
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -96,6 +98,14 @@ export class PanelVisibilityManager {
       this._trackFocusWindow();
     });
 
+    // 8. Update visuals
+    this._signalsHandler.add(
+      this._settings,
+      "changed::panel-color",
+      (settings, key) => {
+        Main.panel.set_style(`background-color: ${settings.get_string(key)};`);
+      },
+    );
     // -- SETTINGS --
 
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
@@ -438,8 +448,9 @@ export class PanelVisibilityManager {
   // -- SETTINGS --
   _updatePanelStyle() {
     const color = this._settings.get_string("panel-color");
-    const opacity = this._settings.get_double("panel-opacity-overlap");
-    Main.panel.set_style(`background-color: ${color}; opacity: ${opacity};`);
+    // const opacity = this._settings.get_double("panel-opacity-overlap");
+    Main.panel.set_style(`background-color: ${color};`);
+    // Main.panel.set_style(`opacity: ${opacity};`);
   }
 
   destroy() {
@@ -468,6 +479,7 @@ export class PanelVisibilityManager {
     this._settings.set_int("panel-position", 0);
     PanelBox.visible = true;
     PanelBox.y = 0;
+    Main.panel.set_style(null);
 
     // Reset at the end
     this._monitorIndex = null;

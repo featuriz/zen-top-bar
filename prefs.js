@@ -1,4 +1,5 @@
 import Adw from "gi://Adw";
+import Gdk from "gi://Gdk";
 import Gio from "gi://Gio";
 import Gtk from "gi://Gtk";
 
@@ -9,6 +10,8 @@ import {
 
 export default class ZenTopBarPreferences extends ExtensionPreferences {
   fillPreferencesWindow(window) {
+    const settings = this.getSettings();
+
     const page = new Adw.PreferencesPage({
       title: _("General"),
       icon_name: "dialog-information-symbolic",
@@ -41,9 +44,7 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     // Panel Position
     const panelPositionRow = new Adw.SpinRow({
       title: _("Panel Position"),
-      subtitle: _(
-        "0 = top, 100 = bottom.\n Based on screen height. For testing only.",
-      ),
+      subtitle: _("0 = top, 100 = bottom. Based on screen height."),
       adjustment: new Gtk.Adjustment({
         lower: 0,
         upper: 100,
@@ -106,10 +107,29 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
       }),
       snap_to_ticks: true,
     });
+    // Panel Color
+    const colorRow = new Adw.ActionRow({
+      title: _("Panel Color"),
+      subtitle: _("The background color of the top panel"),
+    });
+    const colorDialog = new Gtk.ColorDialog();
+    const colorButton = new Gtk.ColorDialogButton({
+      dialog: colorDialog,
+      valign: Gtk.Align.CENTER,
+    });
+    const rgba = new Gdk.RGBA();
+    if (rgba.parse(settings.get_string("panel-color"))) {
+      colorButton.rgba = rgba;
+    }
+    colorButton.connect("notify::rgba", () => {
+      settings.set_string("panel-color", colorButton.rgba.to_string());
+    });
+    colorRow.add_suffix(colorButton);
+    colorRow.activatable_widget = colorButton;
     visibilityGroup.add(animationTimeRow);
+    visibilityGroup.add(colorRow);
 
     // Create a settings object and bind the row to the `show-indicator` key
-    const settings = this.getSettings();
     settings.bind(
       "show-indicator",
       visibilityRow,
