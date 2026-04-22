@@ -43,7 +43,6 @@ export class PanelVisibilityManager {
     this._userForced = false;
     this._pointerListener = null;
     this._hideDebounceId = 0;
-    this._checkDebounceId = 0;
 
     // Defer setup to ensure shell is fully ready
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -461,7 +460,6 @@ export class PanelVisibilityManager {
     this._signalsHandler.destroy();
     this._teardownPressureBarrier();
     this._stopPointerWatch();
-    this._userForced = false;
 
     if (MessageTray._bannerBin) {
       MessageTray._bannerBin.margin_top = 0;
@@ -473,14 +471,21 @@ export class PanelVisibilityManager {
       _originalMessageTrayUpdateState = null;
     }
 
-    this._monitorIndex = null;
-    this._focusWin = null;
     // -- Settings are handled by system. So ignored here
 
     this._settings.set_boolean("show-indicator", true);
     this._settings.set_int("panel-position", 0);
     PanelBox.visible = true;
     PanelBox.y = 0;
+
+    // Reset at the end
+    this._monitorIndex = null;
+    this._focusWin = null;
+    this._metaBarrier = null;
+    this._pressureBarrier = null;
+    this._userForced = false;
+    this._pointerListener = null;
+    this._clearHideDebounce();
 
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
