@@ -11,6 +11,7 @@
 //
 // --
 import Clutter from "gi://Clutter";
+import Gdk from "gi://Gdk";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 import Shell from "gi://Shell";
@@ -51,7 +52,6 @@ export class PanelVisibilityManager {
       this._fixNotification();
       this._trackFocusWindow();
       this._teardownPressureBarrier();
-      this._updatePanelStyle();
       return GLib.SOURCE_REMOVE;
     });
   }
@@ -99,12 +99,16 @@ export class PanelVisibilityManager {
     });
 
     // 8. Update visuals
+    const updateStyles = () => this._updatePanelStyle();
     this._signalsHandler.add(
       this._settings,
       "changed::panel-color",
-      (settings, key) => {
-        Main.panel.set_style(`background-color: ${settings.get_string(key)};`);
-      },
+      updateStyles.bind(this),
+    );
+    this._signalsHandler.add(
+      this._settings,
+      "changed::panel-opacity",
+      updateStyles.bind(this),
     );
     // -- SETTINGS --
 
@@ -447,10 +451,12 @@ export class PanelVisibilityManager {
 
   // -- SETTINGS --
   _updatePanelStyle() {
-    const color = this._settings.get_string("panel-color");
-    // const opacity = this._settings.get_double("panel-opacity-overlap");
-    Main.panel.set_style(`background-color: ${color};`);
-    // Main.panel.set_style(`opacity: ${opacity};`);
+    const color = this._settings.get_string("panel-color"); // e.g., "rgb(0,0,0)" or "#000000"
+    const opacity = this._settings.get_double("panel-opacity");
+    let rgba = new Gdk.RGBA();
+    rgba.parse(color);
+    rgba.alpha = opacity;
+    Main.panel.set_style(`background-color: ${rgba.to_string()};`);
   }
 
   destroy() {

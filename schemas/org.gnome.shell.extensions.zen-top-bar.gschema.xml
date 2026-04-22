@@ -60,6 +60,15 @@
         The background color of the panel.
       </description>
     </key>
+    <key name="panel-opacity" type="d">
+      <default>0.85</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Panel opacity</summary>
+      <description>
+        The opacity of the panel.
+      </description>
+    </key>
+
 
   </schema>
 </schemalist>

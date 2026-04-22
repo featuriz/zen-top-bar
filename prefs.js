@@ -126,8 +126,21 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     });
     colorRow.add_suffix(colorButton);
     colorRow.activatable_widget = colorButton;
+    // Panel Opacity
+    const panelOpacityRow = new Adw.SpinRow({
+      title: _("Panel Opacity"),
+      subtitle: _("The opacity of the top panel"),
+      adjustment: new Gtk.Adjustment({
+        lower: 0.0,
+        upper: 1.0,
+        step_increment: 0.05,
+      }),
+      digits: 2,
+      snap_to_ticks: true,
+    });
     visibilityGroup.add(animationTimeRow);
     visibilityGroup.add(colorRow);
+    visibilityGroup.add(panelOpacityRow);
 
     // Create a settings object and bind the row to the `show-indicator` key
     settings.bind(
@@ -168,6 +181,13 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     settings.bind(
       "animation-time-ms",
       animationTimeRow,
+      "value",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+
+    settings.bind(
+      "panel-opacity",
+      panelOpacityRow,
       "value",
       Gio.SettingsBindFlags.DEFAULT,
     );
