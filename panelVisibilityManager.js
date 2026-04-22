@@ -15,7 +15,6 @@ import Meta from "gi://Meta";
 import Shell from "gi://Shell";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import * as Layout from "resource:///org/gnome/shell/ui/layout.js";
 import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";
 import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
 
@@ -43,6 +42,7 @@ export class PanelVisibilityManager {
     this._userForced = false;
     this._pointerListener = null;
     this._hideDebounceId = 0;
+    this._pressureWatchId = null;
 
     // Defer setup to ensure shell is fully ready
     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -101,7 +101,7 @@ export class PanelVisibilityManager {
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: false, // Panel doesn't affect struts
-      trackFullscreen: true, // Panel doesn't track fullscreen
+      trackFullscreen: true, // Panel tracks fullscreen
     });
   }
 
@@ -233,45 +233,35 @@ export class PanelVisibilityManager {
   // 6. Pressure Barrier
   _setupPressureBarrier() {
     DEBUG("...SETUP BARRIERS...");
-    this._teardownPressureBarrier();
-    const monitor = Main.layoutManager.monitors[this._monitorIndex];
-    if (!monitor) return;
-    const threshold = this._settings.get_int("pressure-threshold");
-    const effectiveThreshold = Math.max(1, threshold);
-
-    this._metaBarrier = new Meta.Barrier({
-      backend: global.backend,
-      x1: monitor.x,
-      x2: monitor.x + monitor.width - 1,
-      y1: monitor.y + 1,
-      y2: monitor.y + 1,
-      directions:
-        Meta.BarrierDirection.POSITIVE_Y | Meta.BarrierDirection.NEGATIVE_Y,
-    });
-    this._pressureBarrier = new Layout.PressureBarrier(
-      effectiveThreshold,
-      Shell.PressureBarrierTimeout,
-      Shell.ActionMode.NORMAL,
+    if (this._pressureWatchId) return;
+    this._pressureWatchId = PointerWatcher.getPointerWatcher().addWatch(
+      16,
+      (x, y) => {
+        const monitor = Main.layoutManager.monitors[this._monitorIndex];
+        if (!monitor) return;
+        const relativeY = y - monitor.y;
+        // If mouse is within 1px of the top edge → trigger barrier hit
+        if (relativeY <= 1 && !this._waitingForPressureHit) {
+          this._waitingForPressureHit = true;
+          this._onBarrierHit();
+          // Debounce: don't retrigger for 500ms
+          GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            this._waitingForPressureHit = false;
+            return GLib.SOURCE_REMOVE;
+          });
+        }
+      },
     );
-    this._pressureBarrier.addBarrier(this._metaBarrier);
-    this._pressureBarrier.connect("trigger", () => {
-      this._onBarrierHit();
-    });
   }
 
   // 6.x
   _teardownPressureBarrier() {
     DEBUG("...CLEAR BARRIERS...");
-    if (this._metaBarrier) {
-      if (this._pressureBarrier)
-        this._pressureBarrier.removeBarrier(this._metaBarrier);
-      this._metaBarrier.destroy();
-      this._metaBarrier = null;
+    if (this._pressureWatchId) {
+      PointerWatcher.getPointerWatcher()._removeWatch(this._pressureWatchId);
+      this._pressureWatchId = null;
     }
-    if (this._pressureBarrier) {
-      this._pressureBarrier.destroy();
-      this._pressureBarrier = null;
-    }
+    this._waitingForPressureHit = false;
   }
 
   // 6.1
@@ -486,6 +476,7 @@ export class PanelVisibilityManager {
     this._userForced = false;
     this._pointerListener = null;
     this._clearHideDebounce();
+    this._pressureWatchId = null;
 
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
