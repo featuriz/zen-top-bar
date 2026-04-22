@@ -23,8 +23,13 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
       title: _("Settings"),
       description: _("Configure the behavior of the extension"),
     });
+    const visibilityGroup = new Adw.PreferencesGroup({
+      title: _("Visibility"),
+      description: _("Configure the visibility of the extension"),
+    });
     page.add(appearanceGroup);
     page.add(settingsGroup);
+    page.add(visibilityGroup);
 
     // -- Appearance --
     // Visibility
@@ -80,15 +85,28 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
         "Lower values increase responsiveness; higher values save CPU",
       ),
       adjustment: new Gtk.Adjustment({
-        lower: 10,
+        lower: 20,
         upper: 500,
-        step_increment: 10,
+        step_increment: 20,
       }),
       snap_to_ticks: true,
     });
     settingsGroup.add(hideDebounceRow);
     settingsGroup.add(hideMarginRow);
     settingsGroup.add(checkDebounceRow);
+
+    // Visuals
+    const animationTimeRow = new Adw.SpinRow({
+      title: _("Animation Time (ms)"),
+      subtitle: _("Time in milliseconds for panel show/hide slide animations"),
+      adjustment: new Gtk.Adjustment({
+        lower: 0,
+        upper: 2000,
+        step_increment: 50,
+      }),
+      snap_to_ticks: true,
+    });
+    visibilityGroup.add(animationTimeRow);
 
     // Create a settings object and bind the row to the `show-indicator` key
     const settings = this.getSettings();
@@ -123,6 +141,13 @@ export default class ZenTopBarPreferences extends ExtensionPreferences {
     settings.bind(
       "check-debounce-ms",
       checkDebounceRow,
+      "value",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+
+    settings.bind(
+      "animation-time-ms",
+      animationTimeRow,
       "value",
       Gio.SettingsBindFlags.DEFAULT,
     );

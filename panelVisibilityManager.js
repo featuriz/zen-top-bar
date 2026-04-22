@@ -235,7 +235,7 @@ export class PanelVisibilityManager {
     DEBUG("...SETUP BARRIERS...");
     if (this._pressureWatchId) return;
     this._pressureWatchId = PointerWatcher.getPointerWatcher().addWatch(
-      16,
+      100,
       (x, y) => {
         const monitor = Main.layoutManager.monitors[this._monitorIndex];
         if (!monitor) return;
@@ -424,9 +424,10 @@ export class PanelVisibilityManager {
   async _transition(targetY) {
     try {
       PanelBox.remove_all_transitions();
+      const ANIMATION_TIME = this._settings.get_int("animation-time-ms");
       await PanelBox.easeAsync({
         y: targetY,
-        duration: 250,
+        duration: ANIMATION_TIME,
         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
       });
     } catch (e) {

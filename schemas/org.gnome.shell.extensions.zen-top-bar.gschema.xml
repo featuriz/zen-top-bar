@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.zen-top-bar" path="/org/gnome/shell/extensions/zen-top-bar/">
+    <!-- APPEARANCE -->
     <key name="show-indicator" type="b">
       <default>true</default>
       <summary>Enable auto-hide</summary>
@@ -14,6 +15,7 @@
         Position of the panel as a percentage of screen height (0 = top, 100 = bottom).
       </description>
     </key>
+    <!-- SETTINGS -->
     <key name="hide-debounce-ms" type="i">
       <range min="100" max="2000"/>
       <default>500</default>
@@ -34,13 +36,23 @@
       </description>
     </key>
     <key name="check-debounce-ms" type="i">
-      <range min="10" max="500"/>
-      <default>50</default>
+      <range min="20" max="500"/>
+      <default>100</default>
       <summary>Detection interval</summary>
       <description>
         The frequency in milliseconds at which the extension checks for cursor position 
         or pressure events. Lower values are more responsive but use more CPU.
       </description>
     </key>
+    <!-- VISUALS -->
+    <key name="animation-time-ms" type="i">
+      <range min="0" max="2000"/>
+      <default>300</default>
+      <summary>Animation duration</summary>
+      <description>
+        Time in milliseconds for panel show/hide slide animations.
+      </description>
+    </key>
+
   </schema>
 </schemalist>
