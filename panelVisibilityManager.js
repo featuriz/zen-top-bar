@@ -13,8 +13,6 @@
 import Clutter from "gi://Clutter";
 import Gdk from "gi://Gdk";
 import GLib from "gi://GLib";
-// import Meta from "gi://Meta";
-// import Shell from "gi://Shell";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";

@@ -1,7 +1,7 @@
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 export const DEBUG = (msg) => {
-  if (true) console.log(`[ZenTopBar] ${msg}`);
+  if (false) console.log(`[ZenTopBar] ${msg}`);
 };
 
 export class GlobalSignalsHandler {
