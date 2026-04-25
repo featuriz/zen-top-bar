@@ -11,6 +11,7 @@ zip:
 		--extra-source=extension.js \
 		--extra-source=metadata.json \
 		--extra-source=panelVisibilityManager.js \
+		--extra-source=prefs.js \
 		--extra-source=utils.js \
 		--extra-source=schemas \
 		--extra-source=LICENSE \
