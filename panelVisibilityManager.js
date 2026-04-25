@@ -11,7 +11,6 @@
 //
 // --
 import Clutter from "gi://Clutter";
-import Gdk from "gi://Gdk";
 import GLib from "gi://GLib";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
@@ -450,12 +449,28 @@ export class PanelVisibilityManager {
 
   // -- SETTINGS --
   _updatePanelStyle() {
-    const color = this._settings.get_string("panel-color"); // e.g., "rgb(0,0,0)" or "#000000"
+    const color = this._settings.get_string("panel-color"); // "#000000" or "rgb(0,0,0)"
     const opacity = this._settings.get_double("panel-opacity");
-    let rgba = new Gdk.RGBA();
-    rgba.parse(color);
-    rgba.alpha = opacity;
-    Main.panel.set_style(`background-color: ${rgba.to_string()};`);
+
+    let finalRgba;
+
+    if (color.startsWith("#")) {
+      // Manual Hex to RGBA conversion
+      const hex = color.replace("#", "");
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      finalRgba = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    } else if (color.startsWith("rgb")) {
+      // Transform rgb(0,0,0) to rgba(0,0,0,opacity)
+      finalRgba = color.replace("rgb(", "rgba(").replace(")", `, ${opacity})`);
+    } else {
+      // Safe fallback
+      finalRgba = `rgba(0, 0, 0, ${opacity})`;
+    }
+
+    // Apply directly to the panel
+    Main.panel.set_style(`background-color: ${finalRgba};`);
   }
 
   destroy() {
