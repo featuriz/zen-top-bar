@@ -3,7 +3,7 @@
   "description": "Auto-hide the top bar for a cleaner workspace.",
   "uuid": "zentopbar@featuriz.in",
   "shell-version": ["50"],
-  "version": 1,
+  "version": 1.1,
   "url": "https://github.com/featuriz/zen-top-bar.git",
   "settings-schema": "org.gnome.shell.extensions.zen-top-bar",
   "session-modes": ["user"],
