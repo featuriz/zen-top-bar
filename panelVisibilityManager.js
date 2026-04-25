@@ -36,8 +36,6 @@ export class PanelVisibilityManager {
     this._checkDebounceId = 0;
 
     // 6. Pressure Barrier
-    this._metaBarrier = null;
-    this._pressureBarrier = null;
     this._userForced = false;
     this._pointerListener = null;
     this._hideDebounceId = 0;
@@ -206,6 +204,11 @@ export class PanelVisibilityManager {
   // 5.1
   _checkWin() {
     DEBUG("...CHECK...");
+
+    const activeWS = global.workspace_manager.get_active_workspace_index();
+    const winWS = this._focusWin.get_workspace().index();
+    if (activeWS !== winWS) return; // ignore other workspaces
+
     if (
       !this._focusWin ||
       this._focusWin.get_monitor() !== this._monitorIndex ||
@@ -504,12 +507,9 @@ export class PanelVisibilityManager {
     // Reset at the end
     this._monitorIndex = null;
     this._focusWin = null;
-    this._metaBarrier = null;
-    this._pressureBarrier = null;
     this._userForced = false;
     this._pointerListener = null;
     this._clearHideDebounce();
-    this._pressureWatchId = null;
 
     Main.layoutManager.removeChrome(PanelBox);
     Main.layoutManager.addChrome(PanelBox, {
