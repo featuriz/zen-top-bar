@@ -502,7 +502,7 @@ export class PanelVisibilityManager {
     this._settings.set_int("panel-position", 0);
     PanelBox.visible = true;
     PanelBox.y = 0;
-    Main.panel.set_style(null);
+    // Main.panel.set_style(null);
 
     // Reset at the end
     this._monitorIndex = null;
