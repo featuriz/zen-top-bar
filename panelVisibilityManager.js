@@ -105,14 +105,19 @@ export class PanelVisibilityManager {
       "changed::panel-opacity",
       updateStyles.bind(this),
     );
-    this._updatePanelStyle();
-    // -- SETTINGS --
+
+    this._signalsHandler.add(
+      Main.panel,
+      "style-changed",
+      updateStyles.bind(this),
+    );
 
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
     Main.layoutManager.addChrome(PanelBox, {
       affectsStruts: false, // Panel doesn't affect struts
       trackFullscreen: true, // Panel tracks fullscreen
     });
+    this._updatePanelStyle();
   }
 
   // 1. Toggle show notification
@@ -472,8 +477,24 @@ export class PanelVisibilityManager {
       finalRgba = `rgba(0, 0, 0, ${opacity})`;
     }
 
-    // Apply directly to the panel
-    Main.panel.set_style(`background-color: ${finalRgba};`);
+    // FIX: Aggressively override transitions, images, and shadows so GNOME's
+    // internal state machine cannot animate or overlay the background.
+    const expectedStyle = `
+      background-color: ${finalRgba} !important;
+      background-image: none !important;
+      box-shadow: none !important;
+      border: none !important;
+      transition-duration: 0ms !important;
+    `
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // The Guard: Only apply if it doesn't already match.
+    // This prevents the 'style-changed' signal from looping infinitely.
+    if (Main.panel.get_style() !== expectedStyle) {
+      Main.panel.set_style(expectedStyle);
+      DEBUG(`Applied custom panel style: ${expectedStyle}`);
+    }
   }
 
   destroy() {
@@ -498,11 +519,11 @@ export class PanelVisibilityManager {
 
     // -- Settings are handled by system. So ignored here
 
-    this._settings.set_boolean("show-indicator", true);
-    this._settings.set_int("panel-position", 0);
+    // this._settings.set_boolean("show-indicator", true);
+    // this._settings.set_int("panel-position", 0);
     PanelBox.visible = true;
     PanelBox.y = 0;
-    // Main.panel.set_style(null);
+    Main.panel.set_style(null);
 
     // Reset at the end
     this._monitorIndex = null;
