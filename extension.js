@@ -45,8 +45,9 @@ export default class ZenTopBarExtension extends Extension {
     DEBUG(`Disabling ${this.uuid}`);
     if (this.enableUnredirect != null) {
       global.compositor.enable_unredirect = this.enableUnredirect;
+      this.enableUnredirect = null;
     }
-    this._pvManager.destroy();
+    this._pvManager?.destroy();
     this._pvManager = null;
   }
 }

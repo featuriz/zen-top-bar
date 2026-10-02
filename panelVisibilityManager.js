@@ -17,7 +17,7 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";
 import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
 
-import { GlobalSignalsHandler, DEBUG, NOTIFY } from "./utils.js";
+import { DEBUG, NOTIFY } from "./utils.js";
 
 const MessageTray = Main.messageTray;
 const PanelBox = Main.layoutManager.panelBox;
@@ -29,7 +29,8 @@ export class PanelVisibilityManager {
     this._settings = settings;
     this._monitorIndex = monitorIndex;
     this._panelHeight = PanelBox.height || 30;
-    this._signalsHandler = new GlobalSignalsHandler();
+    this._idleId = 0;
+    this._pressureDebounceId = 0;
 
     // 5. Focused window tracking
     this._focusWin = null;
@@ -42,7 +43,8 @@ export class PanelVisibilityManager {
     this._pressureWatchId = null;
 
     // Defer setup to ensure shell is fully ready
-    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    this._idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+      this._idleId = 0;
       this._setup();
       this._fixNotification();
       this._trackFocusWindow();
@@ -55,62 +57,55 @@ export class PanelVisibilityManager {
     DEBUG("---ZEN TOP BAR INITIALIZED---");
 
     // 0. When ready update panel height
-    for (const pbs of ["notify::allocation", "notify::height"]) {
-      this._signalsHandler.add(PanelBox, pbs, () => {
-        this._syncPanelHeight();
-      });
-    }
+    PanelBox.connectObject(
+      "notify::allocation",
+      () => this._syncPanelHeight(),
+      "notify::height",
+      () => this._syncPanelHeight(),
+      this,
+    );
 
     // 1. Sync visibility from settings
-    this._signalsHandler.add(
-      this._settings,
+    // 2. Update panel position from settings
+    // 8. Update visuals
+    const updateStyles = () => this._updatePanelStyle();
+    this._settings.connectObject(
       "changed::show-indicator",
       (settings, key) => {
         DEBUG(`${key} = ${settings.get_value(key).print(true)}`);
         PanelBox.visible = this._settings.get_boolean("show-indicator");
         this._onToggleShowNotification();
       },
-    );
-
-    // 2. Update panel position from settings
-    this._signalsHandler.add(
-      this._settings,
       "changed::panel-position",
       (settings, key) => {
         this._updatePanelPosition(settings.get_int(key));
       },
+      "changed::panel-color",
+      updateStyles,
+      "changed::panel-opacity",
+      updateStyles,
+      this,
     );
 
     // 3. Monitor changed - TODOS
-    this._signalsHandler.add(Main.layoutManager, "monitors-changed", () => {
-      this._onMonitorsChanged();
-      this._syncPanelHeight();
-      this._trackFocusWindow();
-    });
+    Main.layoutManager.connectObject(
+      "monitors-changed",
+      () => {
+        this._onMonitorsChanged();
+        this._syncPanelHeight();
+        this._trackFocusWindow();
+      },
+      this,
+    );
 
     // 5. Focus changed
-    this._signalsHandler.add(global.display, "notify::focus-window", () => {
-      this._trackFocusWindow();
-    });
-
-    // 8. Update visuals
-    const updateStyles = () => this._updatePanelStyle();
-    this._signalsHandler.add(
-      this._settings,
-      "changed::panel-color",
-      updateStyles.bind(this),
-    );
-    this._signalsHandler.add(
-      this._settings,
-      "changed::panel-opacity",
-      updateStyles.bind(this),
+    global.display.connectObject(
+      "notify::focus-window",
+      () => this._trackFocusWindow(),
+      this,
     );
 
-    this._signalsHandler.add(
-      Main.panel,
-      "style-changed",
-      updateStyles.bind(this),
-    );
+    Main.panel.connectObject("style-changed", updateStyles, this);
 
     Main.layoutManager.removeChrome(PanelBox); // Remove default panel
     Main.layoutManager.addChrome(PanelBox, {
@@ -184,7 +179,7 @@ export class PanelVisibilityManager {
     DEBUG("...TRACK FOCUS WINDOW...");
     // Disconnect signals from previous focused window
     if (this._focusWin) {
-      this._signalsHandler.remove_by_obj(this._focusWin);
+      this._focusWin.disconnectObject(this);
     }
     this._focusWin = global.display.focus_window;
     if (!this._focusWin) {
@@ -192,16 +187,19 @@ export class PanelVisibilityManager {
       return;
     }
 
-    const checkWinBound = this._scheduleCheck.bind(this);
-
-    ["position-changed", "size-changed"].forEach((sig) => {
-      this._signalsHandler.add(this._focusWin, sig, checkWinBound);
-    });
-    this._signalsHandler.add(this._focusWin, "unmanaged", () => {
-      this._signalsHandler.remove_by_obj(this._focusWin);
-      this._focusWin = null;
-      this._syncPanel(true);
-    });
+    this._focusWin.connectObject(
+      "position-changed",
+      () => this._scheduleCheck(),
+      "size-changed",
+      () => this._scheduleCheck(),
+      "unmanaged",
+      () => {
+        this._focusWin?.disconnectObject(this);
+        this._focusWin = null;
+        this._syncPanel(true);
+      },
+      this,
+    );
     // Manually run it once to sync the state immediately upon focus
     this._scheduleCheck();
   }
@@ -210,15 +208,16 @@ export class PanelVisibilityManager {
   _checkWin() {
     DEBUG("...CHECK...");
 
+    if (!this._focusWin) {
+      this._syncPanel(true);
+      return;
+    }
+
     const activeWS = global.workspace_manager.get_active_workspace_index();
-    const winWS = this._focusWin.get_workspace().index();
+    const winWS = this._focusWin.get_workspace()?.index();
     if (activeWS !== winWS) return; // ignore other workspaces
 
-    if (
-      !this._focusWin ||
-      this._focusWin.get_monitor() !== this._monitorIndex ||
-      this._focusWin.is_destroyed?.()
-    ) {
+    if (this._focusWin.get_monitor() !== this._monitorIndex) {
       this._userForced = false;
       this._syncPanel(true);
       return;
@@ -265,10 +264,16 @@ export class PanelVisibilityManager {
           this._waitingForPressureHit = true;
           this._onBarrierHit();
           // Debounce: don't retrigger for 500ms
-          GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-            this._waitingForPressureHit = false;
-            return GLib.SOURCE_REMOVE;
-          });
+          this._clearPressureDebounce();
+          this._pressureDebounceId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            500,
+            () => {
+              this._pressureDebounceId = 0;
+              this._waitingForPressureHit = false;
+              return GLib.SOURCE_REMOVE;
+            },
+          );
         }
       },
     );
@@ -281,7 +286,15 @@ export class PanelVisibilityManager {
       PointerWatcher.getPointerWatcher()._removeWatch(this._pressureWatchId);
       this._pressureWatchId = null;
     }
+    this._clearPressureDebounce();
     this._waitingForPressureHit = false;
+  }
+
+  _clearPressureDebounce() {
+    if (this._pressureDebounceId) {
+      GLib.source_remove(this._pressureDebounceId);
+      this._pressureDebounceId = 0;
+    }
   }
 
   // 6.1
@@ -422,8 +435,8 @@ export class PanelVisibilityManager {
       CHECK_DEBOUNCE_MS,
       () => {
         // DEBUG("...SCHEDULE CHECK: INNER BLOCK...");
-        this._checkWin(); // 5.1
         this._checkDebounceId = 0;
+        this._checkWin(); // 5.1
         return GLib.SOURCE_REMOVE;
       },
     );
@@ -498,12 +511,21 @@ export class PanelVisibilityManager {
   }
 
   destroy() {
+    if (this._idleId) {
+      GLib.source_remove(this._idleId);
+      this._idleId = 0;
+    }
     if (this._checkDebounceId) {
       GLib.source_remove(this._checkDebounceId);
       this._checkDebounceId = 0;
     }
 
-    this._signalsHandler.destroy();
+    PanelBox.disconnectObject(this);
+    this._settings.disconnectObject(this);
+    Main.layoutManager.disconnectObject(this);
+    global.display.disconnectObject(this);
+    Main.panel.disconnectObject(this);
+    this._focusWin?.disconnectObject(this);
     this._teardownPressureBarrier();
     this._stopPointerWatch();
 
