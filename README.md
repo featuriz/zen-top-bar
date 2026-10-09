@@ -28,7 +28,7 @@
 
 The panel also adapts its color and transparency to your preference — fully transparent on a clear desktop, or any custom color and opacity you choose.
 
-Built from the ground up for **GNOME Shell 50** using modern ES modules, event-driven signal management, and the latest GNOME APIs. Lightweight, dependency-free, and memory-safe.
+Built from the ground up for **GNOME Shell 50 and 51** using modern ES modules, event-driven signal management, and the latest GNOME APIs. Lightweight, dependency-free, and memory-safe.
 
 ---
 
@@ -86,6 +86,7 @@ The extension defines five states:
 
 | Version            | Status                          |
 | :----------------- | :------------------------------ |
+| **GNOME 51**       | ✅ Fully supported and tested   |
 | **GNOME 50**       | ✅ Fully supported and tested   |
 | GNOME 47–49        | ✅ Compatible (limited testing) |
 | GNOME 46           | ⚠️ May work with minor issues   |

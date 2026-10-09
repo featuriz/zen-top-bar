@@ -97,6 +97,6 @@ Reference:
 5. https://gjs-docs.gnome.org/clutter17~17/clutter.actor
 6. https://gjs-docs.gnome.org/shell17~17/
 
-IMPORTANT: GNOME50 ONLY
+IMPORTANT: GNOME 50 and 51 ONLY
 
 ---
