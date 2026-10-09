@@ -28,7 +28,7 @@
 
 The panel also adapts its color and transparency to your preference — fully transparent on a clear desktop, or any custom color and opacity you choose.
 
-Built from the ground up for **GNOME Shell 50 and 51** using modern ES modules, event-driven signal management, and the latest GNOME APIs. Lightweight, dependency-free, and memory-safe.
+Built for **GNOME Shell 51** using modern ES modules, event-driven signal management, and the latest GNOME APIs, including `Meta.CursorTracker` for pointer tracking. Lightweight, dependency-free, and memory-safe.
 
 ---
 
@@ -59,13 +59,13 @@ Built from the ground up for **GNOME Shell 50 and 51** using modern ES modules, 
 | ✨ **Smooth Animations**      | Fluid slide-in/out easing with configurable duration.                                       |
 | 🔒 **Safety Toggle**          | A single switch in prefs always restores the panel — even if something goes wrong.          |
 | 🌍 **Wayland & X11**          | Compatible with both display servers.                                                       |
-| ⚡ **Performance Optimized**  | Event-driven pointer watching, debounced window checks, and proper signal/resource cleanup. |
+| ⚡ **Performance Optimized**  | Event-driven pointer tracking (`Meta.CursorTracker`), throttled and debounced checks, and proper signal/resource cleanup. |
 
 ---
 
 ## 🧠 How It Works
 
-The extension defines five states:
+The extension defines four states:
 
 | State       | Description                                  | Panel      |
 | :---------- | :------------------------------------------- | :--------- |
@@ -84,25 +84,20 @@ The extension defines five states:
 
 ## 🚀 Supported GNOME Versions
 
-| Version            | Status                          |
-| :----------------- | :------------------------------ |
-| **GNOME 51**       | ✅ Fully supported and tested   |
-| **GNOME 50**       | ✅ Fully supported and tested   |
-| GNOME 47–49        | ✅ Compatible (limited testing) |
-| GNOME 46           | ⚠️ May work with minor issues   |
-| GNOME 45 and older | ❌ Not supported                |
+| Version            | Status                        |
+| :----------------- | :---------------------------- |
+| **GNOME 51**       | ✅ Fully supported and tested |
+| GNOME 50 and older | ❌ Not supported              |
+
+GNOME Shell 51 removed `ui/pointerWatcher.js`, which earlier versions of this extension relied on. The extension now tracks the pointer through `Meta.CursorTracker` (`global.backend.get_cursor_tracker()`), so it targets GNOME 51 only. If you are on GNOME 50 or older, install an earlier release from the [releases page](https://github.com/featuriz/zen-top-bar/releases).
 
 ---
 
 ## 🧪 Tested Environments
 
-| Distribution        | GNOME Version | Windowing System | Status              |
-| :------------------ | :------------ | :--------------- | :------------------ |
-| Arch Linux          | 50.4          | Wayland          | ✅ Fully functional |
-| Arch Linux          | 50.4          | X11              | ✅ Fully functional |
-| Fedora 42           | 50.0          | Wayland          | ✅ Fully functional |
-| Ubuntu 25.04        | 50.1          | Wayland          | ✅ Fully functional |
-| openSUSE Tumbleweed | 50.2          | Wayland          | ✅ Fully functional |
+| Distribution | GNOME Version | Windowing System | Status              |
+| :----------- | :------------ | :--------------- | :------------------ |
+| Arch Linux   | 51.0          | Wayland          | ✅ Fully functional |
 
 If you encounter issues on a different setup, please [open an issue](https://github.com/featuriz/zen-top-bar/issues).
 

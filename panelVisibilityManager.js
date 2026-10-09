@@ -38,9 +38,10 @@ export class PanelVisibilityManager {
 
     // 6. Pressure Barrier
     this._userForced = false;
-    this._pointerListener = null;
+    this._panelTracker = null;
     this._hideDebounceId = 0;
-    this._pressureWatchId = null;
+    this._waitingForPressureHit = false;
+    this._edgeTracker = null;
 
     // Defer setup to ensure shell is fully ready
     this._idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
@@ -252,8 +253,8 @@ export class PanelVisibilityManager {
   // 6. Pressure Barrier
   _setupPressureBarrier() {
     DEBUG("...SETUP BARRIERS...");
-    if (this._pressureWatchId) return;
-    this._pressureWatchId = new PointerTracker(
+    if (this._edgeTracker) return;
+    this._edgeTracker = new PointerTracker(
       100,
       (x, y) => {
         const monitor = Main.layoutManager.monitors[this._monitorIndex];
@@ -282,9 +283,9 @@ export class PanelVisibilityManager {
   // 6.x
   _teardownPressureBarrier() {
     DEBUG("...CLEAR BARRIERS...");
-    if (this._pressureWatchId) {
-      this._pressureWatchId.destroy();
-      this._pressureWatchId = null;
+    if (this._edgeTracker) {
+      this._edgeTracker.destroy();
+      this._edgeTracker = null;
     }
     this._clearPressureDebounce();
     this._waitingForPressureHit = false;
@@ -310,17 +311,17 @@ export class PanelVisibilityManager {
   // -- POINTER WATCH --
   _startPointerWatch() {
     DEBUG("...START POINTER WATCH...");
-    if (this._pointerListener) return;
-    this._pointerListener = new PointerTracker(
+    if (this._panelTracker) return;
+    this._panelTracker = new PointerTracker(
       100,
       (_x, y) => this._onPointerMove(y),
     );
   }
   _stopPointerWatch() {
     DEBUG("...STOP POINTER WATCH...");
-    if (this._pointerListener) {
-      this._pointerListener.destroy();
-      this._pointerListener = null;
+    if (this._panelTracker) {
+      this._panelTracker.destroy();
+      this._panelTracker = null;
     }
     this._clearHideDebounce();
   }
@@ -551,7 +552,6 @@ export class PanelVisibilityManager {
     this._monitorIndex = null;
     this._focusWin = null;
     this._userForced = false;
-    this._pointerListener = null;
     this._clearHideDebounce();
 
     Main.layoutManager.removeChrome(PanelBox);
