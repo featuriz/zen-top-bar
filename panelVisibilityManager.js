@@ -14,10 +14,10 @@ import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import * as PointerWatcher from "resource:///org/gnome/shell/ui/pointerWatcher.js";
 import { logErrorUnlessCancelled } from "resource:///org/gnome/shell/misc/errorUtils.js";
 
 import { DEBUG, NOTIFY } from "./utils.js";
+import { PointerTracker } from "./pointerTracker.js";
 
 const MessageTray = Main.messageTray;
 const PanelBox = Main.layoutManager.panelBox;
@@ -253,7 +253,7 @@ export class PanelVisibilityManager {
   _setupPressureBarrier() {
     DEBUG("...SETUP BARRIERS...");
     if (this._pressureWatchId) return;
-    this._pressureWatchId = PointerWatcher.getPointerWatcher().addWatch(
+    this._pressureWatchId = new PointerTracker(
       100,
       (x, y) => {
         const monitor = Main.layoutManager.monitors[this._monitorIndex];
@@ -283,7 +283,7 @@ export class PanelVisibilityManager {
   _teardownPressureBarrier() {
     DEBUG("...CLEAR BARRIERS...");
     if (this._pressureWatchId) {
-      PointerWatcher.getPointerWatcher()._removeWatch(this._pressureWatchId);
+      this._pressureWatchId.destroy();
       this._pressureWatchId = null;
     }
     this._clearPressureDebounce();
@@ -311,7 +311,7 @@ export class PanelVisibilityManager {
   _startPointerWatch() {
     DEBUG("...START POINTER WATCH...");
     if (this._pointerListener) return;
-    this._pointerListener = PointerWatcher.getPointerWatcher().addWatch(
+    this._pointerListener = new PointerTracker(
       100,
       (_x, y) => this._onPointerMove(y),
     );
@@ -319,7 +319,7 @@ export class PanelVisibilityManager {
   _stopPointerWatch() {
     DEBUG("...STOP POINTER WATCH...");
     if (this._pointerListener) {
-      PointerWatcher.getPointerWatcher()._removeWatch(this._pointerListener);
+      this._pointerListener.destroy();
       this._pointerListener = null;
     }
     this._clearHideDebounce();
